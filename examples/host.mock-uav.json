@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "body": {"adapter": "mock_uav", "body_id": "mock-uav-B"},
+  "allowed_capabilities": ["get_position", "move_to"]
+}
