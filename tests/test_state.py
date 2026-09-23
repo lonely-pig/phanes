@@ -105,6 +105,45 @@ class TestIdentity(StateDirTestCase):
             with self.assertRaises(IdentityError, msg=repr(bad_version)):
                 load_identity(self.state)
 
+    def test_load_rejects_non_phanes_name(self):
+        init_identity(self.state)
+        raw = self.read_json(self.state / IDENTITY_FILENAME)
+        for bad in ("NotPhanes", "phanes", "", None, 42):
+            self.write_json(self.state / IDENTITY_FILENAME, dict(raw, name=bad))
+            with self.assertRaises(IdentityError, msg=repr(bad)):
+                load_identity(self.state)
+
+    def test_load_rejects_non_utc_or_naive_created_at(self):
+        init_identity(self.state)
+        raw = self.read_json(self.state / IDENTITY_FILENAME)
+        bad_values = (
+            "2026-09-22T00:00:00",        # naive datetime
+            "2026-09-22T00:00:00+00:00",  # offset form without Z
+            "2026-09-22T08:00:00+08:00",  # other timezone offset
+            "2026-09-22",                 # date only
+            "not-a-date",
+            0,
+        )
+        for bad in bad_values:
+            self.write_json(self.state / IDENTITY_FILENAME, dict(raw, created_at=bad))
+            with self.assertRaises(IdentityError, msg=repr(bad)):
+                load_identity(self.state)
+
+    def test_load_rejects_non_uuid4_agent_id(self):
+        init_identity(self.state)
+        raw = self.read_json(self.state / IDENTITY_FILENAME)
+        bad_ids = (
+            str(uuid.uuid1()),                  # valid UUID but version 1
+            str(uuid.uuid4()).upper(),          # non-canonical case
+            str(uuid.uuid4()).replace("-", ""),  # non-canonical form
+            "not-a-uuid",
+            123,
+        )
+        for bad in bad_ids:
+            self.write_json(self.state / IDENTITY_FILENAME, dict(raw, agent_id=bad))
+            with self.assertRaises(IdentityError, msg=repr(bad)):
+                load_identity(self.state)
+
     def test_load_rejects_invalid_field_types(self):
         init_identity(self.state)
         raw = self.read_json(self.state / IDENTITY_FILENAME)

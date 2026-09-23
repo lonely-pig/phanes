@@ -11,7 +11,7 @@ import json
 import os
 import tempfile
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from phanes.contracts import IDENTITY_SCHEMA_VERSION, Identity
@@ -101,17 +101,23 @@ def load_identity(state_dir: Path | str) -> Identity:
     if not isinstance(raw["agent_id"], str):
         raise IdentityError("identity agent_id must be a string")
     try:
-        uuid.UUID(raw["agent_id"])
+        parsed_uuid = uuid.UUID(raw["agent_id"])
     except ValueError as exc:
         raise IdentityError(f"identity agent_id is not a valid UUID: {raw['agent_id']!r}") from exc
-    if not isinstance(raw["name"], str) or not raw["name"]:
-        raise IdentityError("identity name must be a non-empty string")
-    if not isinstance(raw["created_at"], str):
-        raise IdentityError("identity created_at must be a string")
+    if parsed_uuid.version != 4 or str(parsed_uuid) != raw["agent_id"]:
+        raise IdentityError(
+            f"identity agent_id must be a canonical uuid4 string: {raw['agent_id']!r}"
+        )
+    if raw["name"] != AGENT_NAME:
+        raise IdentityError(f"identity name must be {AGENT_NAME!r}, got {raw['name']!r}")
+    if not isinstance(raw["created_at"], str) or not raw["created_at"].endswith("Z"):
+        raise IdentityError("identity created_at must be UTC ISO 8601 with a 'Z' suffix")
     try:
-        datetime.fromisoformat(raw["created_at"])
+        parsed_created_at = datetime.fromisoformat(raw["created_at"])
     except ValueError as exc:
         raise IdentityError(f"identity created_at is not ISO 8601: {raw['created_at']!r}") from exc
+    if parsed_created_at.tzinfo is None or parsed_created_at.utcoffset() != timedelta(0):
+        raise IdentityError("identity created_at must be timezone-aware UTC")
 
     return Identity(
         agent_id=raw["agent_id"],

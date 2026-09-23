@@ -17,6 +17,7 @@ from phanes.contracts import (
     CAPABILITY_UNAVAILABLE,
     INVALID_ARGUMENT,
     INVALID_RESULT,
+    KNOWN_CAPABILITIES,
     NO_BODY,
     BodyAdapter,
     BodyDescriptor,
@@ -45,28 +46,56 @@ class CapabilityRegistry:
 
     def bind(self, adapter: BodyAdapter, allowed_capabilities: Iterable[str]) -> None:
         """Bind the single body for this process and register the authorized
-        subset of its offered capabilities. Any inconsistency aborts binding.
+        subset of its offered capabilities. Any inconsistency aborts binding
+        before any state is committed; a failed bind leaves the registry empty.
         """
         if self._adapter is not None:
             raise RegistryError("a body is already bound; rebinding is not supported")
 
-        descriptor = adapter.descriptor
+        # Startup-time contract validation of the adapter (trusted local code,
+        # minimal defense — not a plugin sandbox).
+        try:
+            descriptor = adapter.descriptor
+        except Exception as exc:
+            raise RegistryError(f"adapter descriptor is not readable: {exc}") from exc
+        if not isinstance(descriptor, BodyDescriptor):
+            raise RegistryError(
+                f"adapter descriptor must be a BodyDescriptor, got {type(descriptor).__name__}"
+            )
+        if not isinstance(descriptor.body_id, str) or not descriptor.body_id.strip():
+            raise RegistryError("descriptor body_id must be a non-empty string")
+        if not isinstance(descriptor.body_type, str) or not descriptor.body_type.strip():
+            raise RegistryError("descriptor body_type must be a non-empty string")
         if descriptor.adapter_api_version != ADAPTER_API_VERSION:
             raise RegistryError(
                 f"unsupported adapter_api_version: {descriptor.adapter_api_version!r}"
             )
 
-        offered = adapter.capabilities()
-        offered_names = [spec.name for spec in offered]
-        duplicates = sorted({n for n in offered_names if offered_names.count(n) > 1})
-        if duplicates:
-            raise RegistryError(f"adapter offers duplicate capability names: {duplicates}")
+        try:
+            offered = tuple(adapter.capabilities())
+        except Exception as exc:
+            raise RegistryError(f"adapter capabilities() failed: {exc}") from exc
+        offered_names: list[str] = []
         for spec in offered:
+            if not isinstance(spec, CapabilitySpec):
+                raise RegistryError(
+                    f"capability entries must be CapabilitySpec, got {type(spec).__name__}"
+                )
+            if not isinstance(spec.name, str) or not spec.name:
+                raise RegistryError("capability name must be a non-empty string")
+            if spec.name not in KNOWN_CAPABILITIES:
+                raise RegistryError(
+                    f"adapter offers capability outside the fixed contract: {spec.name!r}"
+                )
             if spec.contract_version != CAPABILITY_CONTRACT_VERSION:
                 raise RegistryError(
                     f"capability {spec.name!r} has unsupported contract_version: "
                     f"{spec.contract_version!r}"
                 )
+            offered_names.append(spec.name)
+        duplicates = sorted({n for n in offered_names if offered_names.count(n) > 1})
+        if duplicates:
+            raise RegistryError(f"adapter offers duplicate capability names: {duplicates}")
 
         allowed = list(allowed_capabilities)
         if not all(isinstance(name, str) for name in allowed):

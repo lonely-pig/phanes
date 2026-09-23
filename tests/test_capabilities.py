@@ -352,6 +352,89 @@ class TestCapabilityRegistry(unittest.TestCase):
         self.assertFalse(result.ok)
         self.assertEqual(result.error.code, "INVALID_RESULT")
 
+    # --- P0.3.1 Fix 1: unknown offered capability rejected at bind ---
+    def test_bind_rejects_unknown_offered_capability_no_partial_state(self):
+        class LandAdapter(FakeAdapter):
+            def capabilities(self):
+                return (CapabilitySpec("get_position"), CapabilitySpec("land"))
+
+        registry = CapabilityRegistry()
+        with self.assertRaises(RegistryError):
+            registry.bind(LandAdapter(), ["get_position", "land"])
+        # failure must not leave a partially bound registry
+        self.assertIsNone(registry.current_body)
+        self.assertEqual(registry.list(), ())
+        self.assertEqual(registry.invoke("get_position", {}).error.code, "NO_BODY")
+        # and the registry recovers for a valid bind
+        registry.bind(FakeAdapter(), ["get_position"])
+        self.assertEqual([spec.name for spec in registry.list()], ["get_position"])
+
+    def test_bind_rejects_unknown_offered_even_when_not_allowed(self):
+        class LandAdapter(FakeAdapter):
+            def capabilities(self):
+                return (CapabilitySpec("get_position"), CapabilitySpec("land"))
+
+        with self.assertRaises(RegistryError):
+            CapabilityRegistry().bind(LandAdapter(), ["get_position"])
+
+    def test_wildcard_authorization_rejected(self):
+        with self.assertRaises(RegistryError):
+            self.bound_registry(["*"])
+
+    # --- P0.3.1 Fix 2: startup contract validation ---
+    def test_bind_rejects_non_descriptor(self):
+        class BadDesc(FakeAdapter):
+            @property
+            def descriptor(self):
+                return {"body_id": "x", "body_type": "fake", "adapter_api_version": 1}
+
+        with self.assertRaises(RegistryError):
+            CapabilityRegistry().bind(BadDesc(), [])
+
+    def test_bind_rejects_invalid_descriptor_fields(self):
+        for bad_id, bad_type in (("", "fake"), ("   ", "fake"), (None, "fake"), ("x", ""), ("x", 42)):
+            class BadFields(FakeAdapter):
+                @property
+                def descriptor(self):
+                    return BodyDescriptor(
+                        body_id=bad_id, body_type=bad_type, adapter_api_version=1
+                    )
+
+            with self.assertRaises(RegistryError, msg=(bad_id, bad_type)):
+                CapabilityRegistry().bind(BadFields(), [])
+
+    def test_bind_rejects_non_capability_spec_entries(self):
+        class StringCaps(FakeAdapter):
+            def capabilities(self):
+                return ("move_to",)
+
+        with self.assertRaises(RegistryError):
+            CapabilityRegistry().bind(StringCaps(), [])
+
+    def test_bind_rejects_empty_capability_name(self):
+        class EmptyName(FakeAdapter):
+            def capabilities(self):
+                return (CapabilitySpec(""),)
+
+        with self.assertRaises(RegistryError):
+            CapabilityRegistry().bind(EmptyName(), [])
+
+    def test_bind_wraps_adapter_internal_errors(self):
+        class ExplodingDesc(FakeAdapter):
+            @property
+            def descriptor(self):
+                raise AttributeError("boom")
+
+        with self.assertRaises(RegistryError):
+            CapabilityRegistry().bind(ExplodingDesc(), [])
+
+        class ExplodingCaps(FakeAdapter):
+            def capabilities(self):
+                raise TypeError("boom")
+
+        with self.assertRaises(RegistryError):
+            CapabilityRegistry().bind(ExplodingCaps(), [])
+
     # --- bind failures (Freeze section 8 rule 2, AT15) ---
     def test_double_bind_rejected(self):
         registry = self.bound_registry([])
