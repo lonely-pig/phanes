@@ -20,6 +20,7 @@ from phanes.core import PhanesCore
 from phanes.discovery import DiscoveryError, discover_body, load_host_config
 from phanes.identity import IdentityError, init_identity, load_identity
 from phanes.memory import MemoryStore, MemoryStoreError
+from phanes.migration import MigrationError, export_package, import_package
 
 EXIT_COMMAND = "退出"
 
@@ -126,6 +127,27 @@ def _cmd_run(state_dir: Path, host_config_path: str | None) -> int:
     return _repl(core)
 
 
+def _cmd_export(state_dir: Path, out_dir: Path) -> int:
+    try:
+        export_package(state_dir, out_dir)
+    except (MigrationError, IdentityError, MemoryStoreError, OSError) as exc:
+        print(f"error: export failed: {exc}", file=sys.stderr)
+        return 1
+    print(f"exported package: {out_dir}")
+    return 0
+
+
+def _cmd_import(package_dir: Path, state_dir: Path) -> int:
+    try:
+        identity = import_package(package_dir, state_dir)
+    except (MigrationError, IdentityError, MemoryStoreError, OSError) as exc:
+        print(f"error: import failed: {exc}", file=sys.stderr)
+        return 1
+    print(f"imported state: {state_dir}")
+    print(f"agent_id: {identity.agent_id}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="phanes", description="Phanes P0 runtime")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -137,6 +159,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--state", required=True, help="state directory")
     p_run.add_argument("--host-config", default=None, help="explicit local host config JSON")
 
+    p_export = subparsers.add_parser("export", help="export Self + generic runtime as a migration package")
+    p_export.add_argument("--state", required=True, help="state directory to export")
+    p_export.add_argument("--out", required=True, help="package directory (must not exist)")
+
+    p_import = subparsers.add_parser("import", help="validate a package and restore Self")
+    p_import.add_argument("--package", required=True, help="migration package directory")
+    p_import.add_argument("--state", required=True, help="state directory (must not exist)")
+
     return parser
 
 
@@ -146,6 +176,10 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_init(Path(args.state))
     if args.command == "run":
         return _cmd_run(Path(args.state), args.host_config)
+    if args.command == "export":
+        return _cmd_export(Path(args.state), Path(args.out))
+    if args.command == "import":
+        return _cmd_import(Path(args.package), Path(args.state))
     return 2  # unreachable: subparsers are required
 
 
