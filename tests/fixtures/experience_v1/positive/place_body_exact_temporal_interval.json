@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "agent_id": "04ebb5c8-826d-4335-9c77-a31140c3499e",
+  "records": [
+    {
+      "experience_id": "bdbd3b99-964f-4d40-bfd2-9d7364fb2683",
+      "agent_id": "04ebb5c8-826d-4335-9c77-a31140c3499e",
+      "kind": "place_observation",
+      "payload": {
+        "place_id": "dock-a",
+        "position": {
+          "x": 10,
+          "y": 20
+        }
+      },
+      "provenance": {
+        "source_class": "user_statement",
+        "source_ref": "cli:note:1"
+      },
+      "dependencies": {
+        "body": {
+          "mode": "EXACT",
+          "id": "mock-uav-A"
+        },
+        "environment": {
+          "mode": "EXACT",
+          "id": "mock-env-1"
+        },
+        "frame": {
+          "mode": "EXACT",
+          "id": "mock-frame-1"
+        },
+        "temporal": {
+          "mode": "INTERVAL",
+          "valid_from": "2026-09-28T00:00:00Z",
+          "valid_until": "2026-09-29T00:00:00Z"
+        }
+      },
+      "recorded_at": "2026-09-28T00:00:00Z",
+      "observed_at": "2026-09-27T12:30:00Z",
+      "derived_from": [],
+      "supersedes": null
+    }
+  ]
+}

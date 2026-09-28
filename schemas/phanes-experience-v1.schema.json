@@ -1,0 +1,189 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://phanes.local/schemas/phanes-experience-v1.schema.json",
+  "title": "Phanes Experience Document v1",
+  "description": "Normative structural specification for P1 Experience schema v1 (Architecture Freeze v0.2, sections 6-8 and 10.1). Structural validation only: it deliberately does not express the kind-by-dependency authority table, agent consistency, reference integrity, cycles, supersession subjects, or temporal bound ordering; those are P1.2 semantic validation. The Phanes Runtime uses a Python-standard-library strict validator (phanes/experience_validation.py) that accepts the same structural input set; no third-party JSON Schema engine is required at runtime. Conformance note: utcTimestamp pairs a bounded UTC lexical pattern (accepting both the 'Z' designator and the equivalent '+00:00' offset) with \"format\": \"date-time\"; conformance runs MUST enable format assertion so impossible calendar values are rejected, matching the Runtime validator.",
+  "type": "object",
+  "required": ["schema_version", "agent_id", "records"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": 1, "not": { "type": "boolean" } },
+    "agent_id": { "$ref": "#/$defs/uuid" },
+    "records": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/record" }
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "utcTimestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])T([01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(\\.\\d+)?(Z|\\+00:00)$"
+    },
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "record": {
+      "type": "object",
+      "required": [
+        "experience_id",
+        "agent_id",
+        "kind",
+        "payload",
+        "provenance",
+        "dependencies",
+        "recorded_at",
+        "observed_at",
+        "derived_from",
+        "supersedes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "experience_id": { "$ref": "#/$defs/uuid" },
+        "agent_id": { "$ref": "#/$defs/uuid" },
+        "kind": {
+          "enum": ["place_observation", "body_parameter_observation"]
+        },
+        "payload": true,
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "dependencies": { "$ref": "#/$defs/dependencies" },
+        "recorded_at": { "$ref": "#/$defs/utcTimestamp" },
+        "observed_at": {
+          "anyOf": [{ "$ref": "#/$defs/utcTimestamp" }, { "type": "null" }]
+        },
+        "derived_from": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/uuid" }
+        },
+        "supersedes": {
+          "anyOf": [{ "$ref": "#/$defs/uuid" }, { "type": "null" }]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "kind": { "const": "place_observation" } },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": { "payload": { "$ref": "#/$defs/placeObservationPayload" } }
+          }
+        },
+        {
+          "if": {
+            "properties": { "kind": { "const": "body_parameter_observation" } },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": { "payload": { "$ref": "#/$defs/bodyParameterObservationPayload" } }
+          }
+        }
+      ]
+    },
+    "placeObservationPayload": {
+      "type": "object",
+      "required": ["place_id", "position"],
+      "additionalProperties": false,
+      "properties": {
+        "place_id": { "$ref": "#/$defs/nonEmptyString" },
+        "position": {
+          "type": "object",
+          "required": ["x", "y"],
+          "additionalProperties": false,
+          "properties": {
+            "x": { "type": "number" },
+            "y": { "type": "number" }
+          }
+        }
+      }
+    },
+    "bodyParameterObservationPayload": {
+      "type": "object",
+      "required": ["parameter_name", "value", "unit"],
+      "additionalProperties": false,
+      "properties": {
+        "parameter_name": { "$ref": "#/$defs/nonEmptyString" },
+        "value": { "type": "number" },
+        "unit": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["source_class", "source_ref"],
+      "additionalProperties": false,
+      "properties": {
+        "source_class": {
+          "enum": ["user_statement", "adapter_observation", "test_fixture"]
+        },
+        "source_ref": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "dependencies": {
+      "type": "object",
+      "required": ["body", "environment", "frame", "temporal"],
+      "additionalProperties": false,
+      "properties": {
+        "body": { "$ref": "#/$defs/spatialDependency" },
+        "environment": { "$ref": "#/$defs/spatialDependency" },
+        "frame": { "$ref": "#/$defs/spatialDependency" },
+        "temporal": { "$ref": "#/$defs/temporalDependency" }
+      }
+    },
+    "spatialDependency": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["mode"],
+          "additionalProperties": false,
+          "properties": { "mode": { "const": "NONE" } }
+        },
+        {
+          "type": "object",
+          "required": ["mode", "id"],
+          "additionalProperties": false,
+          "properties": {
+            "mode": { "const": "EXACT" },
+            "id": { "$ref": "#/$defs/nonEmptyString" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["mode"],
+          "additionalProperties": false,
+          "properties": { "mode": { "const": "UNKNOWN" } }
+        }
+      ]
+    },
+    "temporalDependency": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["mode"],
+          "additionalProperties": false,
+          "properties": { "mode": { "const": "NONE" } }
+        },
+        {
+          "type": "object",
+          "required": ["mode", "valid_from", "valid_until"],
+          "additionalProperties": false,
+          "properties": {
+            "mode": { "const": "INTERVAL" },
+            "valid_from": { "$ref": "#/$defs/utcTimestamp" },
+            "valid_until": { "$ref": "#/$defs/utcTimestamp" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["mode"],
+          "additionalProperties": false,
+          "properties": { "mode": { "const": "UNKNOWN" } }
+        }
+      ]
+    }
+  }
+}

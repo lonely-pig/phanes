@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "agent_id": "04ebb5c8-826d-4335-9c77-a31140c3499e",
+  "records": [
+    {
+      "experience_id": "b548b2ee-1764-4bd3-bfe7-0295ddd7dfda",
+      "agent_id": "04ebb5c8-826d-4335-9c77-a31140c3499e",
+      "kind": "body_parameter_observation",
+      "payload": {
+        "parameter_name": "ROLL_KP",
+        "value": 0.18,
+        "unit": "mock-unit"
+      },
+      "provenance": {
+        "source_class": "adapter_observation",
+        "source_ref": "invoke:42"
+      },
+      "dependencies": {
+        "body": {
+          "mode": "NONE"
+        },
+        "environment": {
+          "mode": "EXACT",
+          "id": "mock-env-1"
+        },
+        "frame": {
+          "mode": "UNKNOWN"
+        },
+        "temporal": {
+          "mode": "INTERVAL",
+          "valid_from": "2026-09-28T00:00:00Z",
+          "valid_until": "2026-09-29T00:00:00Z"
+        }
+      },
+      "recorded_at": "2026-09-28T00:00:00Z",
+      "observed_at": null,
+      "derived_from": [],
+      "supersedes": null
+    }
+  ]
+}
