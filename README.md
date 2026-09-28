@@ -1,5 +1,7 @@
 # Phanes P0 — Body Migration Proof of Concept
 
+> **Project status:** P0 is complete and permanently tagged as `v0.1.0-p0`. P1 Experience Portability / Applicability architecture is frozen on the development branch but is **not yet implemented or released**. See the normative [P1 Architecture Freeze v0.2](docs/PHANES_P1_ARCHITECTURE_FREEZE_v0.2.md) and its separate [Prior Art Gate](docs/PHANES_P1_PRIOR_ART_GATE.md).
+
 Phanes 是一个可迁移的持久 Agent 原型（Python 3.11+，纯标准库，无第三方依赖）。
 
 P0 证明一个核心假设：**一个 Agent 的持久 Identity 与 Memory 可以独立于具体 Body 保存、搬运和恢复；恢复后的同一份 Self 可以在新的授权 Body 上继续利用迁移前的事实执行任务。**
