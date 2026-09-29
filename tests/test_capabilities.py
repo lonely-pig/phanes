@@ -12,7 +12,10 @@ import io
 import subprocess
 import sys
 import unittest
+from decimal import Decimal
+from fractions import Fraction
 from pathlib import Path
+from unittest.mock import patch
 
 import phanes
 from phanes import contracts
@@ -23,6 +26,7 @@ from phanes.contracts import (
     IDENTITY_SCHEMA_VERSION,
     KNOWN_CAPABILITIES,
     MEMORY_SCHEMA_VERSION,
+    MOVE_TO,
     PACKAGE_VERSION,
     BodyAdapter,
     BodyDescriptor,
@@ -125,12 +129,20 @@ class TestDataStructures(unittest.TestCase):
 
 class TestCoordinates(unittest.TestCase):
     def test_accepts_finite_numbers(self):
-        for value in (0, 10, -3, 2.5, -0.75):
+        for value in (0, 1, -1, 10, -3, 2.5, -0.75, 1.25, -1.25):
             self.assertTrue(is_valid_coordinate(value), value)
 
     def test_rejects_bool_nan_inf_and_non_numbers(self):
-        for value in (True, False, float("nan"), float("inf"), float("-inf"), "10", None, (1, 2)):
+        for value in (True, False, float("nan"), float("inf"), float("-inf"), "1", "10", None, (1, 2)):
             self.assertFalse(is_valid_coordinate(value), value)
+
+    def test_accepts_arbitrary_finite_integers_without_float_conversion(self):
+        for value in (10**400, -(10**400)):
+            self.assertTrue(is_valid_coordinate(value))
+
+    def test_rejects_other_numeric_types(self):
+        for value in (Decimal("1"), Fraction(1, 2)):
+            self.assertFalse(is_valid_coordinate(value))
 
 
 class TestValidateCapabilityArgs(unittest.TestCase):
@@ -144,6 +156,9 @@ class TestValidateCapabilityArgs(unittest.TestCase):
     def test_move_to_accepts_exact_keys(self):
         validate_capability_args("move_to", {"x": 10, "y": -2.5})
 
+    def test_move_to_accepts_huge_finite_integer_coordinates(self):
+        validate_capability_args(MOVE_TO, {"x": 10**400, "y": -(10**400)})
+
     def test_move_to_rejects_missing_key(self):
         with self.assertRaises(ContractError):
             validate_capability_args("move_to", {"x": 10})
@@ -153,7 +168,7 @@ class TestValidateCapabilityArgs(unittest.TestCase):
             validate_capability_args("move_to", {"x": 10, "y": 20, "z": 30})
 
     def test_move_to_rejects_bool_and_non_finite(self):
-        for bad in (True, float("nan"), float("inf"), "10"):
+        for bad in (True, False, float("nan"), float("inf"), float("-inf"), "10"):
             with self.assertRaises(ContractError, msg=repr(bad)):
                 validate_capability_args("move_to", {"x": bad, "y": 20})
 
@@ -170,6 +185,9 @@ class TestValidateCapabilityResult(unittest.TestCase):
     def test_accepts_position_result(self):
         validate_capability_result("move_to", {"x": 10, "y": 20})
         validate_capability_result("get_position", {"x": 0, "y": 0})
+
+    def test_accepts_huge_finite_integer_result(self):
+        validate_capability_result(MOVE_TO, {"x": 10**400, "y": -(10**400)})
 
     def test_rejects_wrong_keys(self):
         for data in ({"x": 10}, {"x": 10, "y": 20, "z": 0}, {"ok": True}):
@@ -313,6 +331,19 @@ class TestCapabilityRegistry(unittest.TestCase):
         self.assertEqual(result.data, {"x": 10, "y": 20})
         self.assertIsNone(result.error)
 
+    def test_authorized_mock_uav_accepts_huge_integer_once(self):
+        adapter = self.make_mock()
+        registry = CapabilityRegistry()
+        registry.bind(adapter, [MOVE_TO])
+        coordinates = {"x": 10**400, "y": -(10**400)}
+        with patch.object(adapter, "invoke", wraps=adapter.invoke) as invoke:
+            with contextlib.redirect_stdout(io.StringIO()):
+                result = registry.invoke(MOVE_TO, coordinates)
+        self.assertTrue(result.ok)
+        self.assertEqual(result.data, coordinates)
+        self.assertIsNone(result.error)
+        invoke.assert_called_once_with(MOVE_TO, coordinates)
+
     # --- AT10 capability subcases: argument validation ---
     def test_invalid_arguments_rejected_before_adapter_call(self):
         counting = FakeAdapter()
@@ -324,6 +355,7 @@ class TestCapabilityRegistry(unittest.TestCase):
             ("move_to", {"x": True, "y": 20}),               # bool
             ("move_to", {"x": float("nan"), "y": 20}),       # NaN
             ("move_to", {"x": 10, "y": float("inf")}),       # Infinity
+            ("move_to", {"x": 10, "y": float("-inf")}),      # -Infinity
             ("move_to", {"x": "10", "y": 20}),               # wrong type
             ("get_position", {"x": 1}),                      # extra
         ]

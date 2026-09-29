@@ -128,9 +128,13 @@ KNOWN_CAPABILITIES = frozenset(_ARG_KEYS)
 
 def is_valid_coordinate(value: object) -> bool:
     """Finite JSON number; rejects bool, NaN and Infinity (Freeze section 6)."""
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
+    if isinstance(value, bool):
         return False
-    return math.isfinite(value)
+    if isinstance(value, int):
+        return True
+    if isinstance(value, float):
+        return math.isfinite(value)
+    return False
 
 
 def validate_capability_args(name: str, args: object) -> None:
