@@ -199,6 +199,11 @@ def export_package(state_dir: Path | str, out_dir: Path | str) -> Path:
     """
     state_dir = Path(state_dir)
     out_dir = Path(out_dir)
+    # Package v1 cannot represent P1 Self. Never silently drop Experience.
+    # Keep this P0 tool independent of P1 modules for isolated v1 runtimes.
+    experience_path = state_dir / "experiences.json"
+    if experience_path.exists() or experience_path.is_symlink():
+        raise MigrationError("package v1 cannot export a P1 Experience Self")
     identity = load_identity(state_dir)
     MemoryStore.load(state_dir, identity.agent_id)
     if out_dir.exists():
