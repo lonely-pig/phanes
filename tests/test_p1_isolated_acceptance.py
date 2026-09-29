@@ -79,7 +79,7 @@ state, package = Path(sys.argv[2]), Path(sys.argv[3])
 identity = init_identity(state)
 memory = MemoryStore.create(state, identity.agent_id)
 memory.remember_place("Legacy", 777, 888)
-store = ExperienceStore.create(state, identity.agent_id)
+store = ExperienceStore.create(state, identity.agent_id, test_mode=True)
 
 def make(place, x, y, *, environment="env-match", body=None, temporal=None):
     return {

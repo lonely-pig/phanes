@@ -14,6 +14,7 @@ from phanes.experience_contracts import (
     EXPERIENCE_NOT_FOUND,
     EXPERIENCE_SCHEMA_VERSION,
     INVALID_EXPERIENCE,
+    SOURCE_CLASS_TEST_FIXTURE,
 )
 from phanes.experience_semantic import validate_experience_document
 from phanes.experience_validation import ExperienceValidationError
@@ -28,9 +29,11 @@ class ExperienceStoreError(Exception):
 
 
 class ExperienceStore:
-    """An Identity-bound, append-only Experience document."""
+    """Identity-bound Experience history; local append is test-fixture-only in P1."""
 
-    def __init__(self, state_dir: Path | str, identity_agent_id: str) -> None:
+    def __init__(self, state_dir: Path | str, identity_agent_id: str, *, test_mode: bool = False) -> None:
+        if type(test_mode) is not bool:
+            raise TypeError("test_mode must be bool")
         state_dir = Path(state_dir)
         if load_identity(state_dir).agent_id != identity_agent_id:
             raise ExperienceValidationError(INVALID_EXPERIENCE, "agent_id does not match Identity")
@@ -45,9 +48,12 @@ class ExperienceStore:
         self._path = path
         self._agent_id = identity_agent_id
         self._document = copy.deepcopy(document)
+        self._test_mode = test_mode
 
     @classmethod
-    def create(cls, state_dir: Path | str, agent_id: str) -> ExperienceStore:
+    def create(cls, state_dir: Path | str, agent_id: str, *, test_mode: bool = False) -> ExperienceStore:
+        if type(test_mode) is not bool:
+            raise TypeError("test_mode must be bool")
         identity = load_identity(state_dir)
         if identity.agent_id != agent_id:
             raise ExperienceValidationError(INVALID_EXPERIENCE, "agent_id does not match Identity")
@@ -61,11 +67,11 @@ class ExperienceStore:
         }
         validate_experience_document(document, agent_id)
         atomic_write_json(path, document)
-        return cls(state_dir, agent_id)
+        return cls(state_dir, agent_id, test_mode=test_mode)
 
     @classmethod
-    def load(cls, state_dir: Path | str, identity_agent_id: str) -> ExperienceStore:
-        return cls(state_dir, identity_agent_id)
+    def load(cls, state_dir: Path | str, identity_agent_id: str, *, test_mode: bool = False) -> ExperienceStore:
+        return cls(state_dir, identity_agent_id, test_mode=test_mode)
 
     def document_snapshot(self) -> dict:
         return copy.deepcopy(self._document)
@@ -80,5 +86,10 @@ class ExperienceStore:
         candidate = copy.deepcopy(self._document)
         candidate["records"].append(copy.deepcopy(record))
         validate_experience_document(candidate, self._agent_id)
+        source_class = candidate["records"][-1]["provenance"]["source_class"]
+        if not self._test_mode or source_class != SOURCE_CLASS_TEST_FIXTURE:
+            raise ExperienceStoreError(
+                "local Experience creation requires explicit test mode and test_fixture provenance"
+            )
         atomic_write_json(self._path, candidate)
         self._document = candidate

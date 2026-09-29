@@ -52,7 +52,7 @@ class GatewayCase(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.state = Path(temporary.name) / "self"
         self.identity = init_identity(self.state)
-        self.store = ExperienceStore.create(self.state, self.identity.agent_id)
+        self.store = ExperienceStore.create(self.state, self.identity.agent_id, test_mode=True)
         self.current = {
             "body_instance_id": "body-b",
             "environment_id": "site-alpha",

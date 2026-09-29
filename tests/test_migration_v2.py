@@ -37,7 +37,7 @@ class MigrationV2Case(unittest.TestCase):
         self.identity = init_identity(self.source)
         self.memory = MemoryStore.create(self.source, self.identity.agent_id)
         self.memory.remember_place("legacy", 7, 8)
-        self.store = ExperienceStore.create(self.source, self.identity.agent_id)
+        self.store = ExperienceStore.create(self.source, self.identity.agent_id, test_mode=True)
         self.first = record(agent_id=self.identity.agent_id)
         self.store.append_record(self.first)
         self.correction = record(agent_id=self.identity.agent_id)
@@ -67,6 +67,21 @@ class MigrationV2Case(unittest.TestCase):
 
 
 class TestV2RoundTrip(MigrationV2Case):
+    def test_historical_provenance_claims_round_trip_without_reauthentication(self):
+        historical = self.store.document_snapshot()
+        historical["records"][0]["provenance"]["source_class"] = "adapter_observation"
+        historical["records"][1]["provenance"]["source_class"] = "user_statement"
+        historical["records"].append(record(agent_id=self.identity.agent_id))
+        source_path = self.source / "experiences.json"
+        source_path.write_text(json.dumps(historical, sort_keys=True), encoding="utf-8")
+        self.assertEqual(ExperienceStore.load(self.source, self.identity.agent_id).document_snapshot(), historical)
+        before = source_path.read_bytes()
+        self.export()
+        validate_package_v2(self.package)
+        imported = import_package_v2(self.package, self.target)
+        self.assertEqual((self.target / "experiences.json").read_bytes(), before)
+        self.assertEqual(ExperienceStore.load(self.target, imported.agent_id).document_snapshot(), historical)
+
     def test_exact_whitelist_versions_and_complete_self_round_trip(self):
         before = {name: (self.source / name).read_bytes() for name in SELF_FILES_V2}
         self.export()

@@ -36,7 +36,7 @@ class OperationCase(unittest.TestCase):
         self.state = Path(temporary.name) / "self"
         self.identity = init_identity(self.state)
         MemoryStore.create(self.state, self.identity.agent_id)
-        self.store = ExperienceStore.create(self.state, self.identity.agent_id)
+        self.store = ExperienceStore.create(self.state, self.identity.agent_id, test_mode=True)
         self.current = {"environment": "env-a", "frame": "frame-a", "time": None}
         self.provider_calls = {key: 0 for key in self.current}
 

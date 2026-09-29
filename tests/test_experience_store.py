@@ -95,21 +95,27 @@ class TestCreateAndLoad(StoreCase):
         self.assert_code(INVALID_EXPERIENCE, lambda: ExperienceStore(self.state, "04ebb5c8-826d-4335-9c77-a31140c3499e"))
 
     def test_public_api_has_no_arbitrary_path_document_or_whole_document_save(self):
-        self.assertEqual(list(inspect.signature(ExperienceStore).parameters), ["state_dir", "identity_agent_id"])
-        self.assertEqual(list(inspect.signature(ExperienceStore.create).parameters), ["state_dir", "agent_id"])
-        self.assertEqual(list(inspect.signature(ExperienceStore.load).parameters), ["state_dir", "identity_agent_id"])
+        for method, expected in (
+            (ExperienceStore, ["state_dir", "identity_agent_id", "test_mode"]),
+            (ExperienceStore.create, ["state_dir", "agent_id", "test_mode"]),
+            (ExperienceStore.load, ["state_dir", "identity_agent_id", "test_mode"]),
+        ):
+            parameters = inspect.signature(method).parameters
+            self.assertEqual(list(parameters), expected)
+            self.assertEqual(parameters["test_mode"].kind, inspect.Parameter.KEYWORD_ONLY)
+            self.assertIs(parameters["test_mode"].default, False)
         for name in ("save", "save_document", "save_experiences", "replace", "replace_document", "replace_record"):
             self.assertFalse(hasattr(ExperienceStore, name))
 
     def test_constructor_cannot_replace_existing_history_with_supplied_empty_document(self):
-        store = ExperienceStore.create(self.state, self.identity.agent_id)
+        store = ExperienceStore.create(self.state, self.identity.agent_id, test_mode=True)
         first = record(agent_id=self.identity.agent_id)
         store.append_record(first)
         empty = {"schema_version": 1, "agent_id": self.identity.agent_id, "records": []}
         with self.assertRaises(TypeError):
             ExperienceStore(self.path, self.identity.agent_id, empty)
         second = record(agent_id=self.identity.agent_id)
-        ExperienceStore(self.state, self.identity.agent_id).append_record(second)
+        ExperienceStore(self.state, self.identity.agent_id, test_mode=True).append_record(second)
         self.assertEqual(self.read()["records"], [first, second])
         self.assertEqual(ExperienceStore.load(self.state, self.identity.agent_id).document_snapshot()["records"], [first, second])
 
@@ -135,10 +141,80 @@ class TestCreateAndLoad(StoreCase):
                 self.assertFalse((self.state / "unexpected.json").exists())
 
 
+class TestProvenanceCreationBoundary(StoreCase):
+    def test_normal_store_rejects_every_local_source_without_mutation(self):
+        store = ExperienceStore.create(self.state, self.identity.agent_id)
+        before_disk = self.path.read_bytes()
+        before_memory = store.document_snapshot()
+        for source_class in ("adapter_observation", "user_statement", "test_fixture"):
+            item = record(agent_id=self.identity.agent_id)
+            item["provenance"]["source_class"] = source_class
+            with self.subTest(source_class=source_class):
+                with self.assertRaises(ExperienceStoreError):
+                    store.append_record(item)
+                self.assertEqual(self.path.read_bytes(), before_disk)
+                self.assertEqual(store.document_snapshot(), before_memory)
+                self.assertEqual(ExperienceStore.load(self.state, self.identity.agent_id).document_snapshot(), before_memory)
+                self.assertFalse(any(path.name.endswith(".tmp") for path in self.state.iterdir()))
+
+    def test_explicit_test_mode_creates_only_test_fixture(self):
+        store = ExperienceStore.create(self.state, self.identity.agent_id, test_mode=True)
+        fixture = record(agent_id=self.identity.agent_id)
+        store.append_record(fixture)
+        self.assertEqual(ExperienceStore.load(self.state, self.identity.agent_id).get_record(fixture["experience_id"]), fixture)
+        before_disk = self.path.read_bytes()
+        before_memory = store.document_snapshot()
+        for source_class in ("adapter_observation", "user_statement"):
+            item = record(agent_id=self.identity.agent_id)
+            item["provenance"]["source_class"] = source_class
+            with self.subTest(source_class=source_class):
+                with self.assertRaises(ExperienceStoreError):
+                    store.append_record(item)
+                self.assertEqual(self.path.read_bytes(), before_disk)
+                self.assertEqual(store.document_snapshot(), before_memory)
+                self.assertEqual(ExperienceStore.load(self.state, self.identity.agent_id).document_snapshot(), before_memory)
+                self.assertFalse(any(path.name.endswith(".tmp") for path in self.state.iterdir()))
+
+    def test_historical_load_accepts_all_frozen_source_claims(self):
+        ExperienceStore.create(self.state, self.identity.agent_id)
+        records = []
+        for source_class in ("adapter_observation", "user_statement", "test_fixture"):
+            item = record(agent_id=self.identity.agent_id)
+            item["provenance"]["source_class"] = source_class
+            records.append(item)
+        self.write({"schema_version": 1, "agent_id": self.identity.agent_id, "records": records})
+        loaded = ExperienceStore.load(self.state, self.identity.agent_id)
+        self.assertEqual(loaded.document_snapshot()["records"], records)
+
+    def test_test_mode_is_per_store_and_not_persisted(self):
+        fixture_store = ExperienceStore.create(self.state, self.identity.agent_id, test_mode=True)
+        first = record(agent_id=self.identity.agent_id)
+        fixture_store.append_record(first)
+        second = record(agent_id=self.identity.agent_id)
+        ordinary_store = ExperienceStore.load(self.state, self.identity.agent_id)
+        before = self.path.read_bytes()
+        with self.assertRaises(ExperienceStoreError):
+            ordinary_store.append_record(second)
+        self.assertEqual(self.path.read_bytes(), before)
+        ExperienceStore.load(self.state, self.identity.agent_id, test_mode=True).append_record(second)
+        self.assertEqual(
+            ExperienceStore.load(self.state, self.identity.agent_id).document_snapshot()["records"],
+            [first, second],
+        )
+
+    def test_test_mode_must_be_explicit_boolean(self):
+        with self.assertRaises(TypeError):
+            ExperienceStore.create(self.state, self.identity.agent_id, test_mode="yes")
+        self.assertFalse(self.path.exists())
+        ExperienceStore.create(self.state, self.identity.agent_id)
+        with self.assertRaises(TypeError):
+            ExperienceStore.load(self.state, self.identity.agent_id, test_mode=1)
+
+
 class TestAppendAndRead(StoreCase):
     def setUp(self):
         super().setUp()
-        self.store = ExperienceStore.create(self.state, self.identity.agent_id)
+        self.store = ExperienceStore.create(self.state, self.identity.agent_id, test_mode=True)
 
     def item(self):
         return record(agent_id=self.identity.agent_id)
