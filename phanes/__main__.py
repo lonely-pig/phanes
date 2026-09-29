@@ -61,6 +61,10 @@ def _cmd_init(state_dir: Path) -> int:
 def _compose_core(state_dir: Path, host_config_path: str | None) -> PhanesCore:
     """Load Self, optionally discover and bind the explicitly configured
     body, and construct the Core. Raises on any startup error."""
+    # P0 isolated migration runtimes contain only P0 modules. Keep this
+    # production-composition guard independent of the P1 Store import.
+    if (state_dir / "experiences.json").exists():
+        raise ValueError("legacy P0 run cannot operate on a P1 Experience Self")
     identity = load_identity(state_dir)
     memory = MemoryStore.load(state_dir, identity.agent_id)
     registry = CapabilityRegistry()
@@ -120,7 +124,7 @@ def _repl(core: PhanesCore) -> int:
 def _cmd_run(state_dir: Path, host_config_path: str | None) -> int:
     try:
         core = _compose_core(state_dir, host_config_path)
-    except (IdentityError, MemoryStoreError, DiscoveryError, RegistryError) as exc:
+    except (IdentityError, MemoryStoreError, DiscoveryError, RegistryError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     _print_startup(core)
