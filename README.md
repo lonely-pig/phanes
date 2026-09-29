@@ -1,6 +1,6 @@
 # Phanes — Persistent Self Portability Prototype
 
-> **Project status:** P0 已完成并永久标记为 `v0.1.0-p0`。P1 Experience Portability / Applicability 已完成实现，通过 Overall Engineering Acceptance 与 Final Architecture Acceptance；当前位于 `p1-experience-portability` 分支，**尚未 merge、tag 或正式 release**。
+> **Project status:** P0 已完成并永久标记为 `v0.1.0-p0`。P1 Experience Portability / Applicability 已完成实现，通过 Overall Engineering Acceptance 与 Final Architecture Acceptance，并正式发布为 `v0.2.0-p1`。
 
 Phanes 是 Python 3.11+、仅依赖标准库的持久 Agent Self 架构原型。Identity、Memory 与可移植 Experience 可以随固定白名单内的通用 Runtime 搬运到另一 Host；目标 Host 独立提供当前 Body、环境、frame、时钟和授权。迁移 Self 不等于迁移当前 Host 状态或权限。
 
