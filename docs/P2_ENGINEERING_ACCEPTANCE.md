@@ -8,10 +8,12 @@ final code and cumulative diff, then tested documentation-corrected candidate
 `dcf302c770c68282a8dcdd9a15a24a26dd0a9270` from a clean pinned worktree:
 454 tests, zero failures/errors/skips, compileall and diff checks PASS.
 Verdict: **PASS FOR P2 RELEASE**. Master was fast-forwarded to that exact
-commit and independently retested (454/454 PASS) before creating local
-annotated tag `v0.3.0-p2`. No refs have been pushed and no GitHub Release has
-been created. Release scope: **Embodiment Onboarding — Explicit Host Session
-Discovery and Safe Binding**.
+commit and independently retested (454/454 PASS) before creating annotated
+tag `v0.3.0-p2`; a final documentation-only checkpoint completed the release
+commit that the tag identifies. The tag and master are published to GitHub
+together with this report; no GitHub Release object is created (the repository
+has none and uses annotated tags). Release scope: **Embodiment Onboarding —
+Explicit Host Session Discovery and Safe Binding**.
 
 ## SOL P2.2 REVIEW FINDINGS
 
@@ -328,6 +330,6 @@ mechanism.
 Sol P2.2 review blocker B1 is closed in this candidate (commit `0f30983`);
 N1/N2/N3 are documented as scoped limitations above and in the P2 doc.
 
-Sol final Engineering / Release Review and local integration/tagging are
-complete as recorded above. Remote publication requires separate approval.
-Do not start P3.
+Sol final Engineering / Release Review and integration/tagging are complete
+as recorded above. Master and the annotated tag `v0.3.0-p2` are published to
+GitHub with this release commit. Do not start P3.

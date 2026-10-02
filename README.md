@@ -1,6 +1,6 @@
 # Phanes — Persistent Self Portability Prototype
 
-> **Project status:** P0 已完成并永久标记为 `v0.1.0-p0`。P1 Experience Portability / Applicability 已完成实现，通过 Overall Engineering Acceptance 与 Final Architecture Acceptance，并正式发布为 `v0.2.0-p1`。P2（Embodiment Onboarding — Explicit Host Session Discovery and Safe Binding）已完成 P2.1–P2.7，通过最终 Engineering / Release Review，已 fast-forward 整合到 master 并创建本地 annotated tag `v0.3.0-p2`；尚未 push 到 GitHub，未创建 GitHub Release。
+> **Project status:** P0 已完成并永久标记为 `v0.1.0-p0`。P1 Experience Portability / Applicability 已完成实现，通过 Overall Engineering Acceptance 与 Final Architecture Acceptance，并正式发布为 `v0.2.0-p1`。P2（Embodiment Onboarding — Explicit Host Session Discovery and Safe Binding）已完成 P2.1–P2.7，通过最终 Engineering / Release Review，以 annotated tag `v0.3.0-p2` 随本提交公开发布到 GitHub（沿用既有 tag 发布惯例，不创建 GitHub Release）。
 
 Phanes 是 Python 3.11+、仅依赖标准库的持久 Agent Self 架构原型。Identity、Memory 与可移植 Experience 可以随固定白名单内的通用 Runtime 搬运到另一 Host；目标 Host 独立提供当前 Body、环境、frame、时钟和授权。迁移 Self 不等于迁移当前 Host 状态或权限。
 
@@ -58,7 +58,7 @@ P1 package-v2 精确携带 `identity.json`、`memory.json`、`experiences.json` 
 
 P1 没有对应 P0 CLI 的用户演示入口；验收使用程序化 Runtime 组合与独立 Host provider。完整契约见 [P1 Freeze v0.2](docs/PHANES_P1_ARCHITECTURE_FREEZE_v0.2.md)。
 
-## P2 — Host Deployment & One-shot Onboarding（本地 release tag：v0.3.0-p2）
+## P2 — Host Deployment & One-shot Onboarding（已发布：v0.3.0-p2）
 
 P2 在冻结的 P0/P1 之上完成目标 Host 侧的部署与显式一次性 onboarding，不引入新研究机制。目标 Host 独立安装固定名称的 `_p0_discovery`（`phanes/discovery.py` 的逐字节副本）与 `phanes_host.p2_bootstrap`；`import phanes_host.p2_bootstrap` 完全惰性；显式调用 `onboard_host_session(...)` 后一个进程至多发布一个完整 Host 会话，失败可重试，成功后不可重置、重绑或追加授权。
 

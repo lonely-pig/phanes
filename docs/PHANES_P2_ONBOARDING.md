@@ -10,10 +10,13 @@ isolated end-to-end acceptance evidence outside the development repository.
 P2.4 adds the embodiment/session replacement matrix. P2.5 adds failure
 injection and boundary hardening. P2.6 audits migration exclusions; P2.7 closes
 Sol B1 and completes the engineering candidate. Neither import nor onboarding
-performs an Adapter action. Sol final review passed, master was fast-forwarded,
-and local annotated tag `v0.3.0-p2` identifies the independently tested commit
-`dcf302c770c68282a8dcdd9a15a24a26dd0a9270`. No refs have been pushed and no
-GitHub Release has been created. Release scope: **Embodiment Onboarding —
+performs an Adapter action. Sol final review passed and master was
+fast-forwarded; the independently tested candidate was
+`dcf302c770c68282a8dcdd9a15a24a26dd0a9270`, after which a final
+documentation-only checkpoint completed the release commit that annotated tag
+`v0.3.0-p2` identifies. The tag and master are published to GitHub together
+with this documentation; no GitHub Release object is created (the repository
+has none and uses annotated tags). Release scope: **Embodiment Onboarding —
 Explicit Host Session Discovery and Safe Binding**.
 
 ## Implemented public surface
