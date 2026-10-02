@@ -32,7 +32,8 @@ for entry in sys.path:
 assert not old_a.exists()
 import phanes, phanes.contracts, phanes_host
 from phanes_host import p2_bootstrap
-assert not hasattr(p2_bootstrap, "onboard_host_session")
+assert callable(p2_bootstrap.onboard_host_session)
+assert p2_bootstrap._published is False
 assert "phanes.discovery" not in sys.modules
 assert "phanes_host._p0_discovery" not in sys.modules
 assert "phanes_host.mock_uav" not in sys.modules
@@ -66,6 +67,26 @@ if missing:
         raise AssertionError("missing fixed Host dependency did not fail")
     assert "phanes.discovery" not in sys.modules
     assert "phanes_host._p0_discovery" not in sys.modules
+    # P2.2 explicit onboarding must fail closed too, before any compose/UUID
+    # or current-context read; this is not an isolated success/E2E claim.
+    from unittest.mock import Mock, patch
+    providers = dict(get_environment_id=Mock(), get_asserted_frame_id=Mock(), get_evaluation_time=Mock())
+    config = {"schema_version": 1, "body": {"adapter": "mock_uav", "body_id": "body-b"}, "allowed_capabilities": []}
+    with patch("uuid.uuid4") as generated, patch("phanes.p1_runtime.compose_p1_runtime") as composed:
+        try:
+            p2_bootstrap.onboard_host_session("unused-self", config, **providers)
+        except p2_bootstrap.OnboardingError as exc:
+            assert isinstance(exc.__cause__, ImportError)
+            evidence["onboarding_dependency_error"] = str(exc)
+        else:
+            raise AssertionError("missing Host dependency allowed publication")
+        generated.assert_not_called()
+        composed.assert_not_called()
+    assert not p2_bootstrap._published
+    for provider in providers.values():
+        provider.assert_not_called()
+    assert "phanes.discovery" not in sys.modules
+    assert "phanes_host.mock_uav" not in sys.modules
 else:
     discovery = p2_bootstrap._load_host_discovery()
     assert discovery.__name__ == "phanes_host._p0_discovery"
