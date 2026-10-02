@@ -1,4 +1,4 @@
-# Phanes P2 — Host Deployment, One-shot Onboarding, and Replacement Evidence (P2.1–P2.5)
+# Phanes P2 — Host Deployment, One-shot Onboarding, and Replacement Evidence (P2.1–P2.7)
 
 P2 is a Host-side engineering increment on frozen P1 release `v0.2.0-p1`,
 base commit `97c6f477fc587febd22ac12cc17c2ed532113434`. Research novelty
@@ -8,9 +8,13 @@ claim: **NONE**.
 explicit, one-shot private Host assembly and complete publication. P2.3 adds
 isolated end-to-end acceptance evidence outside the development repository.
 P2.4 adds the embodiment/session replacement matrix. P2.5 adds failure
-injection and boundary hardening. Neither import nor onboarding performs an
-Adapter action. P2 is an engineering release candidate, **not released**: no
-merge to master, no tag, no GitHub release has been made for P2.
+injection and boundary hardening. P2.6 audits migration exclusions; P2.7 closes
+Sol B1 and completes the engineering candidate. Neither import nor onboarding
+performs an Adapter action. Sol final review passed, master was fast-forwarded,
+and local annotated tag `v0.3.0-p2` identifies the independently tested commit
+`dcf302c770c68282a8dcdd9a15a24a26dd0a9270`. No refs have been pushed and no
+GitHub Release has been created. Release scope: **Embodiment Onboarding —
+Explicit Host Session Discovery and Safe Binding**.
 
 ## Implemented public surface
 
@@ -468,8 +472,9 @@ Registry.invoke / original Adapter.invoke = 1/1/1; zero authority reports
 1/0/0; missing context/provider errors stop before Registry action.
 
 P0/P1 production, their tests, schemas, config formats and package-v2 semantics
-are unchanged. P2 is an engineering release candidate awaiting independent
-review; it is not merged, tagged, or released.
+are unchanged. Independent final review and post-integration regression each
+passed 454 tests with zero failures, errors, or skips; compileall and diff
+checks passed. The tested commit is the local `v0.3.0-p2` release checkpoint.
 
 ## Migration exclusions (unchanged, re-audited)
 

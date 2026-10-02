@@ -1,12 +1,17 @@
 # Phanes P2 Engineering Acceptance Report
 
-**GLM Implementation Candidate — Awaiting Sol Final Engineering Review**
+**GLM Implementation Evidence — Sol Final Engineering Review Accepted**
 
-This report was produced by the implementation engineer (GLM). It documents
-implemented behavior and test evidence for the P2 engineering candidate. It
-does not claim external or independent review; integration, final review, and
-any release decision belong to the reviewer. No release action has been taken:
-P2 is not merged to master, not tagged, and not published.
+The implementation evidence below was produced by GLM; its milestone entries
+retain their historical candidate context. Sol independently reviewed the
+final code and cumulative diff, then tested documentation-corrected candidate
+`dcf302c770c68282a8dcdd9a15a24a26dd0a9270` from a clean pinned worktree:
+454 tests, zero failures/errors/skips, compileall and diff checks PASS.
+Verdict: **PASS FOR P2 RELEASE**. Master was fast-forwarded to that exact
+commit and independently retested (454/454 PASS) before creating local
+annotated tag `v0.3.0-p2`. No refs have been pushed and no GitHub Release has
+been created. Release scope: **Embodiment Onboarding — Explicit Host Session
+Discovery and Safe Binding**.
 
 ## SOL P2.2 REVIEW FINDINGS
 
@@ -323,5 +328,6 @@ mechanism.
 Sol P2.2 review blocker B1 is closed in this candidate (commit `0f30983`);
 N1/N2/N3 are documented as scoped limitations above and in the P2 doc.
 
-The candidate is ready for Codex / Sol 6.1 independent Engineering Review and
-integration. Do not merge. Do not tag. Do not start P3.
+Sol final Engineering / Release Review and local integration/tagging are
+complete as recorded above. Remote publication requires separate approval.
+Do not start P3.

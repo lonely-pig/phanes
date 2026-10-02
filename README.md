@@ -1,6 +1,6 @@
 # Phanes — Persistent Self Portability Prototype
 
-> **Project status:** P0 已完成并永久标记为 `v0.1.0-p0`。P1 Experience Portability / Applicability 已完成实现，通过 Overall Engineering Acceptance 与 Final Architecture Acceptance，并正式发布为 `v0.2.0-p1`。P2（Host Deployment & One-shot Onboarding）已完成 P2.1–P2.7 engineering candidate，当前为 **release candidate，尚未发布**：未合并 master、未打 tag、未创建 release，等待最终 release review。
+> **Project status:** P0 已完成并永久标记为 `v0.1.0-p0`。P1 Experience Portability / Applicability 已完成实现，通过 Overall Engineering Acceptance 与 Final Architecture Acceptance，并正式发布为 `v0.2.0-p1`。P2（Embodiment Onboarding — Explicit Host Session Discovery and Safe Binding）已完成 P2.1–P2.7，通过最终 Engineering / Release Review，已 fast-forward 整合到 master 并创建本地 annotated tag `v0.3.0-p2`；尚未 push 到 GitHub，未创建 GitHub Release。
 
 Phanes 是 Python 3.11+、仅依赖标准库的持久 Agent Self 架构原型。Identity、Memory 与可移植 Experience 可以随固定白名单内的通用 Runtime 搬运到另一 Host；目标 Host 独立提供当前 Body、环境、frame、时钟和授权。迁移 Self 不等于迁移当前 Host 状态或权限。
 
@@ -58,7 +58,7 @@ P1 package-v2 精确携带 `identity.json`、`memory.json`、`experiences.json` 
 
 P1 没有对应 P0 CLI 的用户演示入口；验收使用程序化 Runtime 组合与独立 Host provider。完整契约见 [P1 Freeze v0.2](docs/PHANES_P1_ARCHITECTURE_FREEZE_v0.2.md)。
 
-## P2 — Host Deployment & One-shot Onboarding（工程候选，未发布）
+## P2 — Host Deployment & One-shot Onboarding（本地 release tag：v0.3.0-p2）
 
 P2 在冻结的 P0/P1 之上完成目标 Host 侧的部署与显式一次性 onboarding，不引入新研究机制。目标 Host 独立安装固定名称的 `_p0_discovery`（`phanes/discovery.py` 的逐字节副本）与 `phanes_host.p2_bootstrap`；`import phanes_host.p2_bootstrap` 完全惰性；显式调用 `onboard_host_session(...)` 后一个进程至多发布一个完整 Host 会话，失败可重试，成功后不可重置、重绑或追加授权。
 
@@ -196,7 +196,7 @@ P1 v2 manifest 使用 `package_version: 2` 与 `core_version: "0.2"`；legacy `p
 
 ## Test Status and P0 Matrix
 
-统一入口：`python -m unittest discover -s tests -v`。P1 发布时的已验收基线为 **362/362 PASS**；P2.2 接收时基线为 **404/404 PASS**；当前 P2 工程候选分支完整套件为 **454/454 PASS**（含 Sol P2.2 审查 B1 修正回归；P0/P1 生产语义未变，新增全部为 P2 测试）。下表保留 P0 的 AT01–AT16；P1 的结构、语义、Store、适用性、Gateway、操作、v2 迁移及隔离 A/B 由相应 `tests/test_experience_*.py`、`tests/test_applicability.py`、`tests/test_migration_v2.py` 和 `tests/test_p1_isolated_acceptance.py` 覆盖；P2 的隔离部署、替换矩阵与失败边界由 `tests/test_p2_*.py` 覆盖。
+统一入口：`python -m unittest discover -s tests -v`。P1 发布时的已验收基线为 **362/362 PASS**；P2.2 接收时基线为 **404/404 PASS**；P2 发布检查点完整套件为 **454/454 PASS**（含 Sol P2.2 审查 B1 修正回归；P0/P1 生产语义未变，新增全部为 P2 测试）。下表保留 P0 的 AT01–AT16；P1 的结构、语义、Store、适用性、Gateway、操作、v2 迁移及隔离 A/B 由相应 `tests/test_experience_*.py`、`tests/test_applicability.py`、`tests/test_migration_v2.py` 和 `tests/test_p1_isolated_acceptance.py` 覆盖；P2 的隔离部署、替换矩阵与失败边界由 `tests/test_p2_*.py` 覆盖。
 
 | AT | 验证目标 | 主要测试位置 | 状态 |
 |---|---|---|---|
@@ -234,4 +234,4 @@ P0 设计边界与冻结决策见 [P0 Architecture Freeze](docs/PHANES_P0_ARCHIT
 
 P1 的验收仅使用二维 mock 坐标、可信本地 Runtime、两种 Experience kind 与两种 intended use。它**不证明** Experience 内容或依赖声明真实、provenance 可认证、相同 frame ID 对应真实物理等价，也不证明恶意迁移包安全、任意机器人知识迁移或 transfer learning。它不提供安全的 PID／控制参数转移、真实无人机飞行安全、权限或 Body 状态连续、在线迁移、多进程一致性，亦不涉及意识连续性。
 
-将来可以另行研究更丰富的 Experience／技能与真实机器人验证；本文不承诺 P2 架构或实现。P1 的规范性边界见 [Architecture Freeze v0.2](docs/PHANES_P1_ARCHITECTURE_FREEZE_v0.2.md)，技术复用决策见 [Prior Art Gate](docs/PHANES_P1_PRIOR_ART_GATE.md)。
+将来可以另行研究更丰富的 Experience／技能与真实机器人验证；本文不承诺后续阶段的新增架构或实现。P1 的规范性边界见 [Architecture Freeze v0.2](docs/PHANES_P1_ARCHITECTURE_FREEZE_v0.2.md)，技术复用决策见 [Prior Art Gate](docs/PHANES_P1_PRIOR_ART_GATE.md)。
