@@ -8,6 +8,18 @@ does not claim external or independent review; integration, final review, and
 any release decision belong to the reviewer. No release action has been taken:
 P2 is not merged to master, not tagged, and not published.
 
+## SOL P2.2 REVIEW FINDINGS
+
+Codex / Sol 6.1 performed an independent read-only review of P2.2 commit
+`9330761` with verdict `REQUEST CHANGES`. Disposition in this candidate:
+
+| Finding | Status | Disposition |
+|---|---|---|
+| **B1** — `allowed_capabilities: Iterable[str]` allowed an executable generator to be iterated during onboarding, indirectly calling a provider (reproduced by Sol: provider calls 1/0/0, publication True) | **CLOSED** | Public authority input narrowed to passive data: exact `tuple` of exact `str`, shape-checked **before** Discovery; generators/iterators/lists/custom containers rejected without iteration (commit `0f30983`). Mandatory regressions added: executable generator (zero provider calls, zero generator-body executions, zero Discovery, no publication), custom `__iter__` object (zero `__iter__` calls), passive tuple success, invalid tuple semantics still delegated to the existing Registry. The "providers not evaluated during onboarding" invariant is marked PASS only through this negative evidence. |
+| **N1** — traceback frame locals may expose preparation objects under Python introspection | **documented** | No scrubber/sandbox built. Claim limited to: partial objects are not published through supported return values, module state, or exception attributes; ordinary introspection is not a supported channel and is not defended against (module and API docstrings; §5, P2 doc). |
+| **N2** — `deepcopy(body_config)` can execute custom `__deepcopy__` on malicious objects | **documented** | No generic safe-object framework built. Documented that P2 config assumes trusted, passive local configuration data; deepcopy side effects out of scope (docstrings; P2 doc). |
+| **N3** — `typing.get_type_hints(onboard_host_session)` raises NameError (TYPE_CHECKING-only Runtime import) | **documented** | LOW tooling issue left as-is to keep `import phanes_host.p2_bootstrap` lazy; documented with the workaround (`inspect.signature`) in the P2 doc. |
+
 ## 1. Baseline
 
 | Item | Value |
@@ -27,7 +39,13 @@ P2 is not merged to master, not tagged, and not published.
 | P2.4 | `e96d61b` | test: add P2.4 embodiment replacement matrix |
 | P2.5 | `defb0ad` | test: harden P2 onboarding failure boundaries |
 | P2.6 | `7942b6a` | docs: prepare P2 embodiment onboarding release candidate |
-| P2.7 | (this commit) | chore: finalize P2 engineering acceptance candidate |
+| P2.6 finalize | `b1f2e9e` | chore: finalize P2 engineering acceptance candidate (report draft) |
+| P2.7 / B1 fix | `0f30983` | fix: require passive tuple authority input (Sol P2.2 review B1) |
+| P2.7 final | (this commit) | docs: close Sol P2.2 review findings and bind acceptance report to candidate SHA |
+
+**Candidate code SHA for review: `0f309833dd1ed6dfc5adb0f06b3c35835e76e5f6`.**
+The commits after it add documentation only (this report and doc updates);
+the full suite was re-run green at the final HEAD and from a clean worktree.
 
 ## 3. Architecture boundary (implemented)
 
@@ -56,10 +74,12 @@ P0/P1 production semantics: **no changes** (verified by diff against
   no persistence, no authority, no live values.
 - `OnboardingError` — ordinary bootstrap exception; preparation failures keep
   `__cause__`; not a P1 stable failure code.
-- `onboard_host_session(state_dir, body_config, *, allowed_capabilities=(),
+- `onboard_host_session(state_dir, body_config, *, allowed_capabilities: tuple[str, ...] = (),
   get_environment_id=None, get_asserted_frame_id=None, get_evaluation_time=None)`
   — explicit one-shot onboarding; returns `(descriptor, p1_runtime)` or `None`
-  for a valid no-body config.
+  for a valid no-body config. The authority input is passive data (exact tuple
+  of exact strings, shape-checked before Discovery, never executed); duplicate/
+  unknown/not-offered semantics stay Registry validation.
 
 No public reset/grant/rebind/SessionManager/HostSessionBinding/
 CapturedAdapterView/Registry accessor exists; private helpers stay private;
@@ -67,9 +87,12 @@ star-import exports exactly the three names (P2.5.14 tests).
 
 ## 5. Implemented behavior summary
 
-- Providers are checked callable and never invoked during onboarding; current
-  authority enters only via the separate `allowed_capabilities` input; a
-  zero-authority session is a complete published session.
+- Providers are checked callable and never invoked during onboarding —
+  including for executable authority inputs: a generator passed as
+  `allowed_capabilities` is rejected before Discovery with zero provider
+  calls and zero generator-body executions (Sol B1 negative evidence).
+  Current authority enters only via the separate passive `allowed_capabilities`
+  tuple; a zero-authority session is a complete published session.
 - Non-empty embedded config authority is rejected before Discovery.
 - The Adapter declaration snapshot is captured exactly once; the descriptor
   and the Registry see the same snapshot; the Registry remains the sole
@@ -88,13 +111,19 @@ star-import exports exactly the three names (P2.5.14 tests).
 | Suite stage | Total | Failures | Errors | Skips |
 |---|---|---|---|---|
 | P2.2 accepted baseline | 404 | 0 | 0 | 0 |
-| Candidate (final, clean worktree re-run) | 447 | 0 | 0 | 0 |
+| P2.6 candidate draft | 447 | 0 | 0 | 0 |
+| Candidate (final, incl. Sol B1 regressions; clean worktree re-run) | 454 | 0 | 0 | 0 |
 
-New tests: P2.3 = 6, P2.4 = 9, P2.5 = 26, P2.6 audit = 2 (43 new; 404 + 43 =
-447). No test was deleted, weakened, renamed away, or skipped to achieve
-green. Validation was repeated from a clean `git worktree` checkout of the
-candidate HEAD: 447/447 PASS, 0 skips. Milestone gates additionally ran
-`compileall` (phanes, phanes_host, tests) and `git diff --check` at every
+New tests: P2.3 = 6, P2.4 = 9, P2.5 = 26, P2.6 audit = 2, P2.7 Sol-B1/oracle
+additions = 7 (executable generator, custom iterable, passive tuple success,
+Registry-delegated tuple semantics, per-provider None semantics, per-provider
+exception semantics, canonical-module failed→corrected retry). No test was
+deleted, weakened, renamed away, or skipped to achieve green; the P2.2
+authority test was updated to the corrected passive-data contract (its
+mutation premise no longer exists under B1) while keeping its no-grant-API
+assertions. Validation was repeated from a clean `git worktree` checkout of
+the final candidate HEAD: 454/454 PASS, 0 skips. Milestone gates additionally
+ran `compileall` (phanes, phanes_host, tests) and `git diff --check` at every
 commit.
 
 ## 7. Isolated deployment evidence (P2.3)
@@ -212,7 +241,7 @@ migrate. package-v2 itself is unchanged.
 | Zero-authority onboarding | PASS | P2.3.5; matrix E; P2.2 |
 | No inherited authority | PASS | P2.4 authority non-continuity; matrix C |
 | No inherited binding | PASS | P2.4 body replacement (old Registry/Adapter absent) |
-| Providers not read during onboarding | PASS | provider counters in all isolated children; P2.2 |
+| Providers not read during onboarding | PASS | provider counters in all isolated children; P2.2; Sol B1 executable-generator negative test (zero provider calls, zero generator-body executions, zero Discovery) |
 | Current context Host-local | PASS | matrix D; P2.2 context tests |
 | Experience cannot populate current context | PASS | P1 gateway boundary tests; matrix D |
 | Declaration snapshot consistency | PASS | P2.5.2 unstable-declaration tests |
@@ -237,15 +266,15 @@ migrate. package-v2 itself is unchanged.
 
 | File | Status | Classification |
 |---|---|---|
-| `docs/PHANES_P2_ONBOARDING.md` | added, then extended in P2.6 | P2 docs |
-| `phanes_host/p2_bootstrap.py` | added (P2.2; unchanged by P2.3–P2.7) | P2 production |
+| `docs/PHANES_P2_ONBOARDING.md` | added, extended in P2.6 and P2.7 | P2 docs |
+| `phanes_host/p2_bootstrap.py` | added (P2.2); modified only by Sol-B1 fix `0f30983` (passive authority input + N1/N2 docstrings) | P2 production |
 | `tests/test_p2_onboarding_isolated.py` | added (P2.1) | P2 tests |
-| `tests/test_p2_onboarding.py` | added (P2.2) | P2 tests |
-| `tests/test_p2_isolated_onboarding_acceptance.py` | added (P2.3) | P2 tests |
+| `tests/test_p2_onboarding.py` | added (P2.2); authority test updated to the corrected passive-data contract (`0f30983`) | P2 tests |
+| `tests/test_p2_isolated_onboarding_acceptance.py` | added (P2.3); Self file-set check added (`0f30983`) | P2 tests |
 | `tests/test_p2_replacement_matrix.py` | added (P2.4) | P2 tests |
-| `tests/test_p2_onboarding_hardening.py` | added (P2.5) | P2 tests |
+| `tests/test_p2_onboarding_hardening.py` | added (P2.5); Sol-B1/oracle additions (`0f30983`) | P2 tests |
 | `tests/test_p2_release_audit.py` | added (P2.6) | P2 tests |
-| `README.md` | modified (P2.6 status/counts/map only) | P2 docs |
+| `README.md` | modified (P2.6/P2.7 status/counts/map only) | P2 docs |
 | `docs/P2_ENGINEERING_ACCEPTANCE.md` | added (P2.7, this file) | P2 docs |
 
 Frozen P0/P1 production semantic changes: **NONE**. Unrelated files changed:
@@ -278,8 +307,17 @@ mechanism.
   authenticity; installation remains a trusted out-of-band step.
 - In-process fresh-module test namespaces isolate publication guards for
   testing; they are not a production reset API.
+- Sol N1: ordinary Python traceback/frame introspection may observe
+  preparation objects; only supported publication channels are defended.
+- Sol N2: `body_config` deepcopy assumes trusted, passive local configuration
+  data; malicious `__deepcopy__` side effects are out of scope.
+- Sol N3: `typing.get_type_hints(onboard_host_session)` raises NameError
+  (TYPE_CHECKING-only Runtime import); use `inspect.signature`.
 
 ## 15. Handoff
+
+Sol P2.2 review blocker B1 is closed in this candidate (commit `0f30983`);
+N1/N2/N3 are documented as scoped limitations above and in the P2 doc.
 
 The candidate is ready for Codex / Sol 6.1 independent Engineering Review and
 integration. Do not merge. Do not tag. Do not start P3.

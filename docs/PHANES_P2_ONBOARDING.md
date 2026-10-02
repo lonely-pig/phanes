@@ -106,7 +106,7 @@ onboard_host_session(
     state_dir: Path | str,
     body_config: dict,
     *,
-    allowed_capabilities: Iterable[str] = (),
+    allowed_capabilities: tuple[str, ...] = (),
     get_environment_id: Callable[[], str | None] | None = None,
     get_asserted_frame_id: Callable[[], str | None] | None = None,
     get_evaluation_time: Callable[[], str | None] | None = None,
@@ -122,6 +122,24 @@ and reaches existing missing-context/UNKNOWN behavior; a provider exception
 propagates unchanged, not as OnboardingError or a fabricated None.
 Body context still comes from `registry.current_body`, not another provider.
 
+`allowed_capabilities` is **passive data** (Sol P2.2 review B1): it must be
+exactly a `tuple` whose members are exactly `str`. The exact-type shape check
+runs before Discovery, so executable generators, iterators, lists, named
+tuples and custom containers are rejected without being iterated or executed;
+a negative test proves a generator whose body would call a provider triggers
+zero provider calls, zero generator-body executions, zero Discovery and no
+publication. Reading a real tuple of real strings cannot run user code.
+Duplicate, unknown, not-offered and contract-mismatch semantics are **not**
+duplicated here — they remain existing Registry validation and still reject
+invalid tuples. `body_config` is assumed to be trusted, passive local
+configuration data; its `deepcopy` must not carry malicious-object side
+effects (`__deepcopy__` hooks are out of P2 scope). Python traceback/frame
+introspection may observe preparation objects; the claim is only that partial
+objects are not published through supported return values, module state, or
+exception attributes. `typing.get_type_hints(onboard_host_session)` raises
+NameError because the Runtime return type is imported under TYPE_CHECKING;
+use `inspect.signature` instead — a documented tooling limitation.
+
 The operation accepts only Self's state directory, existing P0 v1 config and
 the separate authority/provider inputs. It accepts no live Adapter/Registry,
 custom factory, module/code path, URL or caller-selected session ID. There is
@@ -132,8 +150,10 @@ no public Binding/PublishedSession wrapper, reset, rebind or grant API.
 1. Acquire a module-private nonblocking preparation guard; reject an already
    published process before any input inspection or dependency preparation.
 2. Check only `callable(provider)` for the three Host providers.
-3. Snapshot separate allowed names into a tuple, and copy the config. Reject
-   nonempty config-sourced authority; do not merge, ignore or choose priority.
+3. Shape-check the passive `allowed_capabilities` input (exact tuple of exact
+   strings; live iterables are rejected without iteration) and copy the
+   config. Reject nonempty config-sourced authority; do not merge, ignore or
+   choose priority.
 4. Load only the fixed independently installed Host Discovery and reuse its
    `discover_body(config)` validation/factory unchanged.
 5. Read the original trusted Adapter's descriptor and capabilities exactly
@@ -324,6 +344,18 @@ plus subprocess attacks) establishes:
   and leave publication retryable. Adapter construction may already have
   happened when Registry rejects authority content, but nothing is ever
   invoked.
+- Passive authority input (Sol P2.2 review B1): executable generators are
+  rejected with zero provider calls, zero generator-body executions, zero
+  Discovery and no publication; custom iterables are rejected with zero
+  `__iter__` calls; a passive tuple succeeds normally; invalid tuple contents
+  (duplicate/unknown/not-offered) remain Registry rejections, not duplicated
+  P2 rules. Per-provider request semantics are pinned for environment, frame
+  and time: each provider returning None yields the existing P1 outcome
+  (context-missing UNKNOWN codes; time unused for NONE temporal mode;
+  EVALUATION_TIME_MISSING for INTERVAL), and each provider raising propagates
+  the original exception with zero invocations while the session stays usable.
+  A canonical-module subprocess proves a real failed attempt (corrupt Self)
+  recovers via a corrected retry and leaves exactly the three Self files.
 - Unstable declarations: a second descriptor/capabilities read would return
   different values, yet exactly one read per onboarding occurs; the
   descriptor and Registry see the same snapshot; later instability is not
@@ -384,7 +416,7 @@ plus subprocess attacks) establishes:
 | Identity continuity != permission continuity | authority non-continuity test |
 | Experience continuity != applicability continuity | matrix B/D |
 | Migration != action / != authorization | P2.1/P2.3 import-only children; zero-authority cases |
-| Providers not read during onboarding | provider call counters in every isolated child |
+| Providers not read during onboarding | provider call counters in every isolated child; B1 executable-generator negative test (zero provider calls, zero generator-body executions) |
 | Declaration snapshot consistency | TestP252UnstableDeclarations |
 | Registry remains sole invocation boundary | TestP254; counted Registry.invoke in children |
 | Adapter invoke zero during onboarding | all isolated/child counters |
