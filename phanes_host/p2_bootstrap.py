@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock
-from typing import TYPE_CHECKING, Callable, Iterable
+from typing import TYPE_CHECKING, Callable
 
 from phanes.contracts import BodyAdapter, BodyDescriptor, CapabilitySpec
 
@@ -123,17 +123,27 @@ def onboard_host_session(
     state_dir: Path | str,
     body_config: dict,
     *,
-    allowed_capabilities: Iterable[str] = (),
+    allowed_capabilities: tuple[str, ...] = (),
     get_environment_id: Callable[[], str | None] | None = None,
     get_asserted_frame_id: Callable[[], str | None] | None = None,
     get_evaluation_time: Callable[[], str | None] | None = None,
 ) -> tuple[HostSessionDescriptor, _ExperienceOperationalCore] | None:
     """Privately prepare and publish one complete Host session per process.
 
+    ``allowed_capabilities`` is passive data: exactly a tuple of exact
+    strings. It is shape-checked before Discovery, never executed, and never
+    iterated for compatibility with generators or other live iterables.
+    Duplicate/unknown/not-offered/contract semantics stay Registry validation.
+    ``body_config`` is assumed to be trusted, passive local configuration
+    data; its deepcopy must not carry malicious-object side effects.
     A valid explicit no-body configuration returns None and remains UNBOUND.
     Providers are checked for callability, never called here. Preparation
     failures are retryable; successful publication cannot be reset/rebound.
     The independently installed fixed Host Discovery dependency is mandatory.
+    Partial preparation objects are not published through supported return
+    values, module state, or exception attributes; ordinary Python
+    frame/traceback introspection is not a supported channel and is not
+    defended against.
     """
     global _published
     if not _publication_lock.acquire(blocking=False):
@@ -152,9 +162,21 @@ def onboard_host_session(
                     raise TypeError(f"{name} must be callable")
 
             stage = "authority/config input preparation"
-            if isinstance(allowed_capabilities, (str, bytes)):
-                raise TypeError("allowed_capabilities must be an iterable of names, not a string")
-            allowed_snapshot = tuple(allowed_capabilities)
+            # Passive authority input (Sol P2.2 review B1): the exact-type
+            # checks reject generators, iterators, lists, and custom
+            # executable containers before Discovery, so onboarding never
+            # executes caller code while reading authority. Reading a real
+            # tuple of real strings cannot run user code; duplicate, unknown
+            # and not-offered semantics remain Registry validation below.
+            if type(allowed_capabilities) is not tuple:
+                raise TypeError(
+                    "allowed_capabilities must be a plain tuple of capability names, "
+                    f"got {type(allowed_capabilities).__name__}"
+                )
+            for name in allowed_capabilities:
+                if type(name) is not str:
+                    raise TypeError("allowed_capabilities entries must be plain strings")
+            allowed_snapshot = allowed_capabilities
             # Keep the existing Discovery as the sole config validator. The
             # extra P2 rule forbids ambiguous config-sourced authority.
             from copy import deepcopy

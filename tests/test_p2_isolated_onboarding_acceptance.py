@@ -297,7 +297,10 @@ evidence = {
     "self_hashes_after": self_hashes(),
     "package_digest_before": before["package"],
     "package_digest_after": package_digest(),
+    # the whole Self directory: onboarding must not add session sidecars
+    "state_files": sorted(path.name for path in state_dir.iterdir()),
 }
+assert evidence["state_files"] == ["experiences.json", "identity.json", "memory.json"]
 print(json.dumps(evidence, sort_keys=True))
 '''
 

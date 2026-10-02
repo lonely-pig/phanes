@@ -21,11 +21,12 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import Mock, patch
 
+from phanes.applicability import ApplicabilityStatus
 from phanes.capabilities import CapabilityRegistry, RegistryError
 from phanes.contracts import BodyDescriptor, CapabilitySpec, MOVE_TO, GET_POSITION
 from phanes.experience_contracts import INVALID_EXPERIENCE
 from phanes.experience_store import ExperienceStore
-from phanes.identity import IdentityError, init_identity
+from phanes.identity import IdentityError, init_identity, load_identity
 from phanes.memory import MemoryStore, MemoryStoreError
 from phanes.migration_v2 import SELF_FILES_V2, export_package_v2, import_package_v2
 from phanes.p1_runtime import compose_p1_runtime
@@ -720,6 +721,183 @@ class TestP2514PublicApiAudit(HardeningBase):
 
         for name in ("HostSessionDescriptor", "OnboardingError", "onboard_host_session"):
             self.assertFalse(hasattr(phanes_host, name), name)
+
+
+class TestSolB1PassiveAuthorityInput(HardeningBase):
+    """Sol P2.2 review B1: the public authority input is passive data."""
+
+    def test_executable_generator_rejected_without_iteration(self):
+        calls = {"provider": 0, "generator_body": 0}
+
+        def provider():
+            calls["provider"] += 1
+            return "env-a"
+
+        def authority_names():
+            calls["generator_body"] += 1
+            provider()
+            yield MOVE_TO
+
+        self.assert_rejected(cause_type=TypeError, allowed_capabilities=authority_names())
+        self.assertEqual(calls, {"provider": 0, "generator_body": 0})
+        self.discover.assert_not_called()
+        self.assertEqual(self.counts["construction"], 0)
+        self.onboard(allowed_capabilities=(MOVE_TO,))
+        self.assertTrue(self.bootstrap._published)
+
+    def test_custom_iterable_rejected_without_iteration(self):
+        class ExecutableIterable:
+            def __init__(self):
+                self.iter_calls = 0
+
+            def __iter__(self):
+                self.iter_calls += 1
+                yield MOVE_TO
+
+        executable = ExecutableIterable()
+        self.assert_rejected(cause_type=TypeError, allowed_capabilities=executable)
+        self.assertEqual(executable.iter_calls, 0)
+        self.discover.assert_not_called()
+        self.onboard(allowed_capabilities=(MOVE_TO,))
+        self.assertTrue(self.bootstrap._published)
+
+    def test_passive_tuple_authority_still_succeeds_normally(self):
+        descriptor, runtime = self.onboard(allowed_capabilities=("move_to",))
+        self.assertTrue(self.bootstrap._published)
+        self.assertEqual(self.registries[0].list(), (CapabilitySpec(MOVE_TO),))
+        self.assertEqual(descriptor.offered_capabilities, self.offered)
+        self.assertTrue(runtime.navigate_experience(self.experience_id).ok)
+        self.assertEqual(self.counts["action"], 1)
+
+    def test_invalid_tuple_semantics_stay_delegated_to_registry(self):
+        for allowed in (("move_to", "move_to"), ("unknown",), ("",), (GET_POSITION, "unknown")):
+            with self.subTest(allowed=allowed):
+                self.assert_rejected(cause_type=RegistryError, allowed_capabilities=allowed)
+        # Non-string members are a P2 passive-data shape failure before
+        # Discovery, not a duplicated Registry rule: no additional Adapter is
+        # constructed for it.
+        before = self.counts["construction"]
+        self.assert_rejected(cause_type=TypeError, allowed_capabilities=(MOVE_TO, 2))
+        self.assertEqual(self.counts["construction"], before)
+        self.onboard(allowed_capabilities=(MOVE_TO,))
+        self.assertTrue(self.bootstrap._published)
+
+
+class TestP2516PerProviderCurrentContext(HardeningBase):
+    """Sol acceptance oracle: environment/frame/time each tested with None and
+    with an exception, against the real P1 request path."""
+
+    def interval_experience(self):
+        identity = load_identity(self.state)
+        store = ExperienceStore.load(self.state, identity.agent_id, test_mode=True)
+        item = record(agent_id=identity.agent_id)
+        item["dependencies"]["body"] = {"mode": "EXACT", "id": "body-a"}
+        item["dependencies"]["temporal"] = {
+            "mode": "INTERVAL",
+            "valid_from": "2026-01-01T00:00:00Z",
+            "valid_until": "2099-01-01T00:00:00Z",
+        }
+        store.append_record(item)
+        return item["experience_id"]
+
+    def test_each_provider_none_uses_existing_p1_semantics(self):
+        interval_id = self.interval_experience()
+        _, runtime = self.onboard(allowed_capabilities=(MOVE_TO,))
+        # environment missing → existing UNKNOWN reason code
+        self.values["environment"] = None
+        result = runtime.navigate_experience(self.experience_id)
+        self.assertIs(result.status, ApplicabilityStatus.UNKNOWN)
+        self.assertEqual(result.reason_codes, ("ENVIRONMENT_CONTEXT_MISSING",))
+        self.values["environment"] = "env-a"
+        # frame missing → existing UNKNOWN reason code
+        self.values["frame"] = None
+        result = runtime.navigate_experience(self.experience_id)
+        self.assertIs(result.status, ApplicabilityStatus.UNKNOWN)
+        self.assertEqual(result.reason_codes, ("FRAME_CONTEXT_MISSING",))
+        self.values["frame"] = "frame-a"
+        # time missing is simply unused for NONE temporal mode → applicable
+        # and the existing P1 path executes the authorized move exactly once
+        self.assertIsNone(self.values["time"])
+        result = runtime.navigate_experience(self.experience_id)
+        self.assertTrue(result.ok)
+        self.assertEqual(result.data, {"x": 10, "y": 20})
+        # time missing for an INTERVAL dependency → existing UNKNOWN reason
+        result = runtime.navigate_experience(interval_id)
+        self.assertIs(result.status, ApplicabilityStatus.UNKNOWN)
+        self.assertEqual(result.reason_codes, ("EVALUATION_TIME_MISSING",))
+
+    def test_each_provider_exception_propagates_unchanged(self):
+        _, runtime = self.onboard(allowed_capabilities=(MOVE_TO,))
+        provider_params = {
+            "environment": "get_environment_id",
+            "frame": "get_asserted_frame_id",
+            "time": "get_evaluation_time",
+        }
+        for name, parameter in provider_params.items():
+            with self.subTest(provider=name):
+                failure = RuntimeError(f"{name} provider failed")
+                provider = self.providers[parameter]
+                original = provider.side_effect
+                provider.side_effect = failure
+                try:
+                    with self.assertRaises(RuntimeError) as caught:
+                        runtime.navigate_experience(self.experience_id)
+                    self.assertIs(caught.exception, failure)
+                finally:
+                    provider.side_effect = original
+        self.assertEqual(self.counts["action"], 0)
+        # the session itself remains fully usable
+        self.assertTrue(runtime.navigate_experience(self.experience_id).ok)
+
+
+class TestP2517CanonicalModuleRetryInRealProcess(HardeningBase):
+    """Sol acceptance oracle: the canonical module (real import, real process)
+    recovers from a failed attempt and publishes on the corrected retry."""
+
+    def test_canonical_module_failed_attempt_then_corrected_retry(self):
+        code = r'''
+import importlib.util, json, shutil, sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+import phanes_host
+spec = importlib.util.spec_from_file_location("phanes_host._p0_discovery", sys.argv[3])
+discovery = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = discovery
+spec.loader.exec_module(discovery)
+phanes_host._p0_discovery = discovery
+from phanes_host import p2_bootstrap as bootstrap
+
+state = Path(sys.argv[2])
+config = {"schema_version": 1, "body": {"adapter": "mock_uav", "body_id": "body-a"}, "allowed_capabilities": []}
+providers = dict(get_environment_id=lambda: "env-a", get_asserted_frame_id=lambda: "frame-a",
+                 get_evaluation_time=lambda: None)
+try:
+    bootstrap.onboard_host_session(str(state), config, allowed_capabilities=("move_to",), **providers)
+except bootstrap.OnboardingError as exc:
+    assert not bootstrap._published
+    first_error = type(exc.__cause__).__name__
+else:
+    raise AssertionError("corrupt Self was published")
+
+shutil.copyfile(sys.argv[4], state / "experiences.json")
+result = bootstrap.onboard_host_session(str(state), config, allowed_capabilities=("move_to",), **providers)
+assert result is not None and bootstrap._published
+assert result[0].body.body_id == "body-a"
+assert result[1].navigate_experience(sys.argv[5]).ok
+assert sorted(path.name for path in state.iterdir()) == ["experiences.json", "identity.json", "memory.json"]
+print("CANONICAL_RETRY_PASS")
+'''
+        good_state = self.root / "good-state"
+        shutil.copytree(self.state, good_state)
+        (self.state / "experiences.json").write_text("{}", encoding="utf-8")
+        result = subprocess.run(
+            [sys.executable, "-I", "-B", "-c", code, str(REPO_ROOT), str(self.state),
+             str(self.root / "_p0_discovery.py"), str(good_state / "experiences.json"),
+             self.experience_id],
+            capture_output=True, text=True, timeout=60, cwd=self.root,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("CANONICAL_RETRY_PASS", result.stdout)
 
 
 if __name__ == "__main__":

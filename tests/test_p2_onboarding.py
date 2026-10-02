@@ -575,17 +575,18 @@ class TestOneShotOnboarding(unittest.TestCase):
         self.assertEqual(self.uuid.call_count, 1)
         self.assertTrue(self.bootstrap._published)
 
-    def test_authority_is_snapshotted_and_no_grant_api_exists(self):
-        allowed = [MOVE_TO]
-        original_discover = self.discovery.discover_body
-
-        def mutate(config):
-            allowed.clear()
-            return original_discover(config)
-
-        with patch.object(self.discovery, "discover_body", side_effect=mutate):
-            _, runtime = self.onboard(allowed_capabilities=allowed)
-        self.assertEqual(allowed, [])
+    def test_authority_is_passive_data_bound_once_and_no_grant_api_exists(self):
+        # Sol P2.2 review B1: the public authority input is passive data. A
+        # list is rejected before Discovery, and a tuple cannot be mutated, so
+        # no caller code can run while authority is read; the allowed set is
+        # bound exactly once and never re-read from a live source.
+        allowed = (MOVE_TO,)
+        error = self.assert_failure(allowed_capabilities=[MOVE_TO])
+        self.assertIsInstance(error.__cause__, TypeError)
+        self.assertEqual(self.counts["construction"], 0)
+        self.discover.assert_not_called()
+        _, runtime = self.onboard(allowed_capabilities=allowed)
+        self.assertEqual(allowed, (MOVE_TO,))
         self.assertEqual(self.registries[0].list(), (CapabilitySpec(MOVE_TO),))
         self.assertTrue(runtime.navigate_experience(self.experience_id).ok)
         for owner in (self.bootstrap, runtime, self.registries[0]):
