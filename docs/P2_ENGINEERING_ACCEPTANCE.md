@@ -60,9 +60,10 @@ Ownership is unchanged from the P2 freeze:
   providers, current context, Host configuration, current binding.
 - **EXTERNAL WORLD**: actual position/environment/hardware — untouched.
 
-P2.3–P2.7 added evidence and documentation only; the only P2 production file
-remains `phanes_host/p2_bootstrap.py` (from P2.2, unchanged since). Frozen
-P0/P1 production semantics: **no changes** (verified by diff against
+P2.3–P2.6 primarily added validation, tests, and documentation. P2.7
+additionally applied the Sol B1 public-input boundary fix to
+`phanes_host/p2_bootstrap.py`. Frozen P0/P1 production semantics:
+**no changes** (verified by diff against
 `97c6f47` — `phanes/` is untouched; see §12).
 
 ## 4. Implemented public API
@@ -141,8 +142,11 @@ Measured results (child JSON evidence, asserted by the parent):
   runtime modules originate in the copied package; Host modules and
   `_p0_discovery` originate in the trusted Host tree; `phanes.discovery`
   cannot be imported; A's path does not exist.
-- Import negative control: zero construction/discovery/registry/bind/compose/
-  UUID/session/action events; `_p0_discovery` never even loaded.
+- Import-only child: no published session and `_p0_discovery` never loaded.
+  Its hooks are installed after the first bootstrap import, so its zero
+  counters are not evidence about that first import. First-import zero
+  construction/discovery/registry/bind/compose/UUID/action evidence comes
+  from `TestBootstrapImport`, which installs hooks before importing bootstrap.
 - Zero authority: onboarding succeeds; offered = (get_position, move_to);
   Registry registers nothing; matching Experience applicable yet request ends
   `CAPABILITY_UNAVAILABLE`; Adapter.invoke = 0.

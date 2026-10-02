@@ -1,6 +1,6 @@
 # Phanes — Persistent Self Portability Prototype
 
-> **Project status:** P0 已完成并永久标记为 `v0.1.0-p0`。P1 Experience Portability / Applicability 已完成实现，通过 Overall Engineering Acceptance 与 Final Architecture Acceptance，并正式发布为 `v0.2.0-p1`。P2（Host Deployment & One-shot Onboarding）已完成 P2.1–P2.5 工程实现与验证，当前为 **release candidate，尚未发布**：未合并 master、未打 tag、未创建 release，等待独立工程评审。
+> **Project status:** P0 已完成并永久标记为 `v0.1.0-p0`。P1 Experience Portability / Applicability 已完成实现，通过 Overall Engineering Acceptance 与 Final Architecture Acceptance，并正式发布为 `v0.2.0-p1`。P2（Host Deployment & One-shot Onboarding）已完成 P2.1–P2.7 engineering candidate，当前为 **release candidate，尚未发布**：未合并 master、未打 tag、未创建 release，等待最终 release review。
 
 Phanes 是 Python 3.11+、仅依赖标准库的持久 Agent Self 架构原型。Identity、Memory 与可移植 Experience 可以随固定白名单内的通用 Runtime 搬运到另一 Host；目标 Host 独立提供当前 Body、环境、frame、时钟和授权。迁移 Self 不等于迁移当前 Host 状态或权限。
 
@@ -65,7 +65,7 @@ P2 在冻结的 P0/P1 之上完成目标 Host 侧的部署与显式一次性 onb
 - 公开 API 仅三项：`HostSessionDescriptor`（只读、临时、可持久化声明之外的空接口）、`OnboardingError`、`onboard_host_session`；授权输入 `allowed_capabilities` 是被动数据（精确 `tuple[str, ...]`，不含可执行迭代器，重复/未知语义仍由 Registry 判定）。
 - offered 声明永远不是授权：零授权会话是完整的已发布会话，请求走既有 P1 适用性路径后仍被 Registry 拒绝。
 - 三类 provider（environment/frame/evaluation_time）由当前 Host 显式提供，onboarding 期间只检查可调用、从不调用；当前 context 不被历史 Experience 填充。
-- session ID 为发布成功后生成的一次性 opaque UUID，不进入 TargetContext、Experience、Self 或迁移包；新 Body/新会话需要新进程。
+- session ID 为成功完成 Runtime composition 后、publication 前生成的一次性 opaque UUID，不进入 TargetContext、Experience、Self 或迁移包；新 Body/新会话需要新进程。
 - package-v2 白名单与 P1 完全一致；P2 代码、Host 状态与授权均不迁移。
 
 已验证的边界证据（隔离部署端到端、具身/会话替换矩阵、失败注入与边界加固、迁移排除审计）见 [P2 Onboarding 文档](docs/PHANES_P2_ONBOARDING.md)。P2 不证明物理真实、恶意 Host 安全、加密身份、真实硬件安全或在线换体。

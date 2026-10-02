@@ -276,9 +276,11 @@ counts, the session declaration, request outcomes, and Self/package digests.
   originates from the copied runtime, `phanes_host`/`p2_bootstrap`/`mock_uav`
   and `_p0_discovery` from the trusted Host tree; `import phanes.discovery`
   fails; A's path is unavailable.
-- Import negative control: importing `phanes_host.p2_bootstrap` under
-  patched-construction hooks performs zero onboarding work, generates no
-  session ID, publishes nothing, and never loads `_p0_discovery`.
+- Import-only child: no session is published and `_p0_discovery` is never
+  loaded. Its hooks are installed after the first bootstrap import, so its
+  counters do not observe that first import. `TestBootstrapImport` separately
+  installs hooks before the first import and proves zero onboarding work,
+  session-ID generation, and action calls.
 - Zero authority: `allowed_capabilities=()` publishes a complete session whose
   Registry registers nothing; a matching Experience evaluates applicable but
   the request still ends `CAPABILITY_UNAVAILABLE` with zero Adapter invokes.
