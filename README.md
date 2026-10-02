@@ -1,6 +1,6 @@
 # Phanes — Persistent Self Portability Prototype
 
-> **Project status:** P0 已完成并永久标记为 `v0.1.0-p0`。P1 Experience Portability / Applicability 已完成实现，通过 Overall Engineering Acceptance 与 Final Architecture Acceptance，并正式发布为 `v0.2.0-p1`。
+> **Project status:** P0 已完成并永久标记为 `v0.1.0-p0`。P1 Experience Portability / Applicability 已完成实现，通过 Overall Engineering Acceptance 与 Final Architecture Acceptance，并正式发布为 `v0.2.0-p1`。P2（Host Deployment & One-shot Onboarding）已完成 P2.1–P2.5 工程实现与验证，当前为 **release candidate，尚未发布**：未合并 master、未打 tag、未创建 release，等待独立工程评审。
 
 Phanes 是 Python 3.11+、仅依赖标准库的持久 Agent Self 架构原型。Identity、Memory 与可移植 Experience 可以随固定白名单内的通用 Runtime 搬运到另一 Host；目标 Host 独立提供当前 Body、环境、frame、时钟和授权。迁移 Self 不等于迁移当前 Host 状态或权限。
 
@@ -58,12 +58,24 @@ P1 package-v2 精确携带 `identity.json`、`memory.json`、`experiences.json` 
 
 P1 没有对应 P0 CLI 的用户演示入口；验收使用程序化 Runtime 组合与独立 Host provider。完整契约见 [P1 Freeze v0.2](docs/PHANES_P1_ARCHITECTURE_FREEZE_v0.2.md)。
 
+## P2 — Host Deployment & One-shot Onboarding（工程候选，未发布）
+
+P2 在冻结的 P0/P1 之上完成目标 Host 侧的部署与显式一次性 onboarding，不引入新研究机制。目标 Host 独立安装固定名称的 `_p0_discovery`（`phanes/discovery.py` 的逐字节副本）与 `phanes_host.p2_bootstrap`；`import phanes_host.p2_bootstrap` 完全惰性；显式调用 `onboard_host_session(...)` 后一个进程至多发布一个完整 Host 会话，失败可重试，成功后不可重置、重绑或追加授权。
+
+- 公开 API 仅三项：`HostSessionDescriptor`（只读、临时、可持久化声明之外的空接口）、`OnboardingError`、`onboard_host_session`。
+- offered 声明永远不是授权：零授权会话是完整的已发布会话，请求走既有 P1 适用性路径后仍被 Registry 拒绝。
+- 三类 provider（environment/frame/evaluation_time）由当前 Host 显式提供，onboarding 期间只检查可调用、从不调用；当前 context 不被历史 Experience 填充。
+- session ID 为发布成功后生成的一次性 opaque UUID，不进入 TargetContext、Experience、Self 或迁移包；新 Body/新会话需要新进程。
+- package-v2 白名单与 P1 完全一致；P2 代码、Host 状态与授权均不迁移。
+
+已验证的边界证据（隔离部署端到端、具身/会话替换矩阵、失败注入与边界加固、迁移排除审计）见 [P2 Onboarding 文档](docs/PHANES_P2_ONBOARDING.md)。P2 不证明物理真实、恶意 Host 安全、加密身份、真实硬件安全或在线换体。
+
 ## P0 Quick Start
 
 前置：Python 3.11+（本仓库在 Windows / Python 3.13.7 上验证）。在仓库根目录执行：
 
 ```powershell
-python -m unittest discover -s tests -v   # 当前完整仓库：362 tests
+python -m unittest discover -s tests -v   # 当前完整仓库：447 tests
 ```
 
 以下 CLI 命令与交互语法是 **P0-only** 演示；不要用它从 P1 Self 的 legacy Memory 坐标发起 P1 动作。
@@ -170,19 +182,21 @@ phanes/               # 通用代码；v1/v2 各有不同的固定迁移白名�
   migration_v2.py           # P1 package-v2 工具；不在 v2 Runtime 白名单
 phanes_host/          # 宿主独立提供；不迁移
   mock_uav.py         # MockUAVAdapter（get_position / move_to）
+  p2_bootstrap.py     # P2 显式一次性 onboarding（目标 Host 独立安装）
+  _p0_discovery.py    # 仅部署产物：phanes/discovery.py 的逐字节副本（不在仓库中）
 examples/
   host.mock-uav.json  # P0 显式授权示例（不自动加载）
 schemas/
   phanes-experience-v1.schema.json  # P1 规范性结构 schema
-tests/                # unittest：P0、P1 各阶段及隔离 A/B 证据
-docs/                 # P0/P1 Architecture Freeze、Prior Art 与状态文档
+tests/                # unittest：P0、P1 各阶段、P2 onboarding 及隔离 A/B 证据
+docs/                 # P0/P1 Architecture Freeze、Prior Art 与 P2 文档
 ```
 
 P1 v2 manifest 使用 `package_version: 2` 与 `core_version: "0.2"`；legacy `phanes.__version__` 仍为 `"0.1"`，供 P0 版本路径使用。两种表示尚未统一，v2 按 manifest 合同校验；本次文档更新不改变任何版本常量。
 
 ## Test Status and P0 Matrix
 
-统一入口：`python -m unittest discover -s tests -v`。当前已验收基线为 **362/362 PASS**。下表保留 P0 的 AT01–AT16；P1 的结构、语义、Store、适用性、Gateway、操作、v2 迁移及隔离 A/B 由相应 `tests/test_experience_*.py`、`tests/test_applicability.py`、`tests/test_migration_v2.py` 和 `tests/test_p1_isolated_acceptance.py` 覆盖。
+统一入口：`python -m unittest discover -s tests -v`。P1 发布时的已验收基线为 **362/362 PASS**；P2.2 接收时基线为 **404/404 PASS**；当前 P2 工程候选分支完整套件为 **447/447 PASS**（P0/P1 生产语义未变，新增全部为 P2 测试）。下表保留 P0 的 AT01–AT16；P1 的结构、语义、Store、适用性、Gateway、操作、v2 迁移及隔离 A/B 由相应 `tests/test_experience_*.py`、`tests/test_applicability.py`、`tests/test_migration_v2.py` 和 `tests/test_p1_isolated_acceptance.py` 覆盖；P2 的隔离部署、替换矩阵与失败边界由 `tests/test_p2_*.py` 覆盖。
 
 | AT | 验证目标 | 主要测试位置 | 状态 |
 |---|---|---|---|

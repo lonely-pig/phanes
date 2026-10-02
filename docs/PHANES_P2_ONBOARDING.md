@@ -1,13 +1,16 @@
-# Phanes P2 — Host Deployment and One-shot Onboarding (P2.1/P2.2)
+# Phanes P2 — Host Deployment, One-shot Onboarding, and Replacement Evidence (P2.1–P2.5)
 
-P2.1 is a Host-side preparation increment on frozen P1 release
-`v0.2.0-p1`, base commit `97c6f477fc587febd22ac12cc17c2ed532113434`.
-Research novelty claim: **NONE**.
+P2 is a Host-side engineering increment on frozen P1 release `v0.2.0-p1`,
+base commit `97c6f477fc587febd22ac12cc17c2ed532113434`. Research novelty
+claim: **NONE**.
 
 **P2.1 establishes deployment and a read-only declaration only.** P2.2 adds
-explicit, one-shot private Host assembly and complete publication. Neither
-import nor onboarding performs an Adapter action. P2.3 isolated end-to-end
-acceptance is not implemented or claimed by this increment.
+explicit, one-shot private Host assembly and complete publication. P2.3 adds
+isolated end-to-end acceptance evidence outside the development repository.
+P2.4 adds the embodiment/session replacement matrix. P2.5 adds failure
+injection and boundary hardening. Neither import nor onboarding performs an
+Adapter action. P2 is an engineering release candidate, **not released**: no
+merge to master, no tag, no GitHub release has been made for P2.
 
 ## Implemented public surface
 
@@ -192,11 +195,216 @@ Trusted Host constructors, declaration reads and capabilities inspection
 must be non-actuating. P2 ensures it calls no `adapter.invoke()` during
 preparation; it does not sandbox malicious Python code hiding side effects.
 
+## Minimal usage example (trusted target Host)
+
+The example shows the only supported onboarding path. It assumes the B
+deployment layout above: the copied package-v2 Runtime root and the
+independent trusted Host tree are on `sys.path`, Self was restored by a
+trusted v2 import, and `_p0_discovery.py` is installed under its fixed name.
+The Host explicitly chooses providers and authority; nothing is discovered,
+auto-authorized, dynamically loaded, or rebound.
+
+```python
+from pathlib import Path
+
+from phanes_host.p2_bootstrap import onboard_host_session
+
+state_dir = Path("B/state")  # Self restored by the trusted package-v2 import
+
+body_config = {
+    "schema_version": 1,
+    "body": {"adapter": "mock_uav", "body_id": "uav-001"},
+    "allowed_capabilities": [],  # config authority stays empty by design
+}
+
+# Providers are Host-supplied current-context functions. They are checked
+# callable during onboarding and called only at request time.
+providers = dict(
+    get_environment_id=lambda: "env-alpha",
+    get_asserted_frame_id=lambda: "frame-alpha",  # Host-asserted coordinate contract
+    get_evaluation_time=lambda: None,             # temporal mode NONE needs no time
+)
+
+# Zero-authority onboarding: a complete, published, but non-acting session.
+descriptor, runtime = onboard_host_session(
+    state_dir, body_config, allowed_capabilities=(), **providers)
+descriptor.offered_capabilities      # declarations only, never authority
+runtime.navigate_experience(...)     # CAPABILITY_UNAVAILABLE, zero Adapter invokes
+
+# Explicit-authority onboarding (fresh process; one session per process).
+descriptor, runtime = onboard_host_session(
+    state_dir, body_config, allowed_capabilities=("move_to",), **providers)
+runtime.navigate_experience(experience_id)  # existing P1 path, at most one invoke
+```
+
+The example must not be read to suggest automatic hardware discovery, dynamic
+loading, automatic authorization, post-bind grants, or hot rebind: none exist.
+
+## P2.3 isolated deployment evidence
+
+`tests/test_p2_isolated_onboarding_acceptance.py` constructs the real A → B
+deployment: A creates a Self with an Experience, exports a real package-v2
+(`export_package_v2`), B copies it, restores Self with `import_package_v2`,
+and independently installs the Host tree. A is renamed away before any child
+runs. Every scenario is a fresh `python -I -S -B` subprocess with a hostile
+inherited `PYTHONPATH` pointing at the development repository and the vanished
+A path. Child evidence reports PID, effective `sys.path`, module origins,
+counted Adapter/Registry/bind/compose/UUID/discovery work, provider call
+counts, the session declaration, request outcomes, and Self/package digests.
+
+- Isolation: no sys.path entry resolves under the repository or A; `phanes`
+  originates from the copied runtime, `phanes_host`/`p2_bootstrap`/`mock_uav`
+  and `_p0_discovery` from the trusted Host tree; `import phanes.discovery`
+  fails; A's path is unavailable.
+- Import negative control: importing `phanes_host.p2_bootstrap` under
+  patched-construction hooks performs zero onboarding work, generates no
+  session ID, publishes nothing, and never loads `_p0_discovery`.
+- Zero authority: `allowed_capabilities=()` publishes a complete session whose
+  Registry registers nothing; a matching Experience evaluates applicable but
+  the request still ends `CAPABILITY_UNAVAILABLE` with zero Adapter invokes.
+- Explicit authority: `allowed_capabilities=("move_to",)` exercises the real
+  P1 path (Experience → Gateway → TargetContext → Applicability → Authority →
+  Registry → captured view → original MockUAV Adapter) exactly once
+  (Registry.invoke = Adapter.invoke = 1) and the original adapter's log line
+  appears on stderr.
+- Missing frame context: frame provider returns None → `UNKNOWN` /
+  `FRAME_CONTEXT_MISSING` with zero invocations (fixture matches body and
+  environment so frame is the only missing condition).
+- Provider exception: a request-time RuntimeError propagates unchanged (not
+  OnboardingError) with zero invocations; the snapshot order stops at the
+  raising provider (environment 1, frame 1, time 0).
+- Immutability: Self file hashes, the complete package digest, parent-side
+  byte comparisons, and `validate_package_v2` are unchanged by onboarding and
+  requests in every scenario.
+
+## P2.4 embodiment/session replacement evidence
+
+`tests/test_p2_replacement_matrix.py` migrates one Self carrying Experiences
+recorded on two bodies (uav-1/frame-alpha and uav-2/frame-beta) into an
+independent B deployment. Every case runs fresh `-I -S -B` processes; this is
+not hot rebind. `P2.4_MATRIX` evidence rows report case, PID, agent_id,
+body_id, session_id, authority, current context, applicability result,
+Registry/Adapter invoke counts, and Self hashes. Observed cases:
+
+| Case | Self | Body | Authority | Current context | Result |
+|---|---|---|---|---|---|
+| A | same | uav-1 (same) | move_to | frame-alpha | new session, invoke exactly once |
+| B | same | uav-2 (same type) | move_to | frame-alpha | uav-1 Experience `INAPPLICABLE`/`BODY_MISMATCH` |
+| C | same | uav-2 | get_position only | frame-beta | applicable uav-2 Experience → `CAPABILITY_UNAVAILABLE` |
+| D | same | uav-1 | move_to | frame-beta / missing | `INAPPLICABLE`/`FRAME_MISMATCH`; `UNKNOWN`/`FRAME_CONTEXT_MISSING` |
+| E | same | uav-2 | zero | frame-beta | applicable Experience → `CAPABILITY_UNAVAILABLE` |
+| F | same | uav-2 | move_to | frame-beta | invoke exactly once |
+
+Established distinctions (observation-based; no cryptographic claims):
+
+- Same body, new process → new session ID, new Registry, new providers, new
+  authority input; no object reuse across PIDs.
+- Body replacement keeps agent_id, memory and Experience history (hashes
+  equal), while authority, Registry, providers, context and Adapter of the
+  old body are absent — the historical record yields
+  `BODY_MISMATCH` + `FRAME_MISMATCH` in the new session.
+- Authority non-continuity: after an authorized successful navigation, a zero
+  authority session with the same Experience still cannot act.
+- Context non-continuity: B's frame provider alone decides current context; A's
+  frame is never reused because the Experience came from A.
+- Session-ID non-semantics: identical inputs in two processes produce
+  identical applicability outcomes with different session IDs;
+  `host_session_id` never appears in TargetContext, dependency matching, or
+  applicability reasons.
+
+## P2.5 failure-injection and boundary evidence
+
+`tests/test_p2_onboarding_hardening.py` (in-process fresh module namespaces
+plus subprocess attacks) establishes:
+
+- Input failures: malformed body_config types/fields/schema versions/body
+  declarations, unknown or hostile adapter identifiers, malformed
+  `allowed_capabilities` content, missing/non-callable providers, and
+  non-empty embedded config authority are all rejected with preserved causes
+  and leave publication retryable. Adapter construction may already have
+  happened when Registry rejects authority content, but nothing is ever
+  invoked.
+- Unstable declarations: a second descriptor/capabilities read would return
+  different values, yet exactly one read per onboarding occurs; the
+  descriptor and Registry see the same snapshot; later instability is not
+  observed.
+- Declaration exceptions: descriptor/capabilities failures yield
+  OnboardingError with the original cause, no bind/compose/publication, and a
+  clean retry.
+- Registry remains the sole validator: unknown/duplicate/wrong-version
+  capability declarations and wrong adapter API versions fail as
+  `RegistryError` inside bind; the P2 descriptor deliberately does not
+  duplicate these rules (it accepts shapes the Registry rejects).
+- Compose failures: missing or corrupt Self files and an
+  identity/history agent mismatch fail before UUID and publication and
+  remain retryable after repair.
+- UUID/descriptor construction failures: a failing or garbage-producing
+  uuid4 (empty, whitespace, or an object whose `__str__` raises) publishes
+  nothing and remains retryable; descriptor validation is not weakened.
+- Second onboarding: after publication every subsequent call — including
+  no-body configs — fails before any Host work (all measured deltas zero)
+  and the earlier Runtime stays usable.
+- Reentrancy/concurrency: overlapping preparation is rejected without
+  consuming the outer attempt; a deterministic pause proves the guard; an
+  8-thread race yields exactly one published session, one UUID, one bind,
+  one construction, and seven rejected callers.
+- No-body edge: repeated valid `body=None` returns None, performs zero work,
+  and never consumes the publication slot; after real publication the same
+  input follows the published-session rule.
+- Dynamic loading attacks: adapter identifiers resembling paths, URLs,
+  modules or shell fragments cannot trigger loading (fixed factory table
+  only); unusual body_id values remain opaque data that reach the Body
+  without loading or writing anything.
+- Repository fallback attacks: with the development repository genuinely
+  first or last on `sys.path` and the fixed dependency absent, onboarding
+  still fails closed; the importable `phanes.discovery` fallback target is
+  never called (zero calls on its mocked `discover_body`).
+- Persistence leak search: after session creation, Self and exported package
+  bytes contain no session ID, no `host_session_id` marker, no Host context
+  sentinels, no deployment paths, no `p2_bootstrap` reference, and no
+  authority names; the state directory gains no extra files.
+- Public API audit: the supported P2 surface is exactly
+  `HostSessionDescriptor`, `OnboardingError`, `onboard_host_session`;
+  star-import exports exactly those; private helpers stay private; the Host
+  package does not re-export the API; no reset/grant/rebind/binding/
+  Registry-accessor names exist.
+
+## Frozen invariants and where the tests prove them
+
+| P2 invariant | Evidence (tests) |
+|---|---|
+| Import != Onboard | TestBootstrapImport; import_only isolated child |
+| Discovery != Authority | zero-authority matrix cases; test_zero_authority_* |
+| Host declaration != Physical truth | descriptor shape/ephemerality tests; P2.5.13 leak search |
+| Authority != Applicability | matrix C/E; missing-context scenarios |
+| Applicability != Execution success | matrix C/E; zero-authority applicable request |
+| Old Host session != New Host session | matrix A; same-body/new-process tests |
+| Same Body != Same Host session | matrix A; session_id non-semantic test |
+| Self continuity != Host-state continuity | body-replacement persistence test |
+| Identity continuity != permission continuity | authority non-continuity test |
+| Experience continuity != applicability continuity | matrix B/D |
+| Migration != action / != authorization | P2.1/P2.3 import-only children; zero-authority cases |
+| Providers not read during onboarding | provider call counters in every isolated child |
+| Declaration snapshot consistency | TestP252UnstableDeclarations |
+| Registry remains sole invocation boundary | TestP254; counted Registry.invoke in children |
+| Adapter invoke zero during onboarding | all isolated/child counters |
+| Exactly one Adapter invoke for authorized request | P2.3 explicit-authority; matrix A/F |
+| Failed first onboarding retryable | TestP251/253/255/256/257 |
+| One successful session per process | TestP258/259; race storm |
+| body=None remains UNBOUND | TestP2510; P2.2 no-body tests |
+| Session ID non-persistent/ephemeral | P2.5.13 leak search; P2.2 byte comparisons |
+| No hot rebind / no post-bind grant | public API audit; authority snapshot test |
+| No dynamic loading / no repository fallback | TestP2511; TestP2512; P2.1/P2.3 isolation |
+| package-v2 unchanged; P1 semantics unchanged | P2.6 migration audit test; full P0/P1 suites |
+
 ## Verification
 
 ```text
 python -m unittest discover -s tests -p test_p2_onboarding.py -v
 python -m unittest discover -s tests -p test_p2_onboarding_isolated.py -v
+python -m unittest discover -s tests -p test_p2_isolated_onboarding_acceptance.py -v
+python -m unittest discover -s tests -p test_p2_replacement_matrix.py -v
+python -m unittest discover -s tests -p test_p2_onboarding_hardening.py -v
 python -m unittest discover -s tests -v
 ```
 
@@ -204,24 +412,19 @@ The isolated tests create/export a real package-v2, copy it to B, restore Self
 with the preinstalled trusted tool, and independently install Host source.
 They compare Discovery bytes/hash, then remove A's original test path and run
 a separate Python process with `-I -S -B` from B. Site packages are excluded;
-even an inherited PYTHONPATH
-pointing at the development repository/A is ignored.
+even an inherited PYTHONPATH pointing at the development repository/A is
+ignored.
 
 `P2.1_DEPLOYMENT` evidence reports PID, effective sys.path, Runtime/Host roots,
 module origins, installed Discovery hash, or the explicit missing-dependency
-error. Python standard-library paths remain available. Tests assert no repo/A
-import path, no package `phanes.discovery`, correct module type identity, and
-unchanged Self/package bytes. Temporary evidence paths do not represent a
-persistent session or migration format.
+error. `P2.3_EVIDENCE` adds the complete onboarding/request record for the
+isolated authority scenario. `P2.4_MATRIX` prints one evidence row per
+replacement case. Python standard-library paths remain available. Tests assert
+no repo/A import path, no package `phanes.discovery`, correct module type
+identity, and unchanged Self/package bytes. Temporary evidence paths do not
+represent a persistent session or migration format.
 
-P2.2 extends the same four maintained files. The P2.1 absence-of-future-API
-assertions now recognize the explicitly authorized function; import-inertness,
-declaration boundaries and isolated deployment checks remain enforced.
-The isolated missing-dependency probe additionally rejects explicit onboarding
-without fallback, provider calls, composition or UUID generation. It does not
-claim P2.3 isolated successful end-to-end acceptance.
-
-New P2.2 unit/composition tests use fresh test-only module namespaces to isolate
+P2.2 unit/composition tests use fresh test-only module namespaces to isolate
 permanent publication guards (not a supported production reset). A separate
 fresh-process test verifies the real module's one-shot guard and that its first
 Runtime remains operational. Counted trusted Adapters track construction,
@@ -231,4 +434,27 @@ Registry.invoke / original Adapter.invoke = 1/1/1; zero authority reports
 1/0/0; missing context/provider errors stop before Registry action.
 
 P0/P1 production, their tests, schemas, config formats and package-v2 semantics
-are unchanged. No P2.3 completion or release acceptance is claimed.
+are unchanged. P2 is an engineering release candidate awaiting independent
+review; it is not merged, tagged, or released.
+
+## Migration exclusions (unchanged, re-audited)
+
+Package-v2 still carries exactly the three Self files and the fixed generic
+Runtime whitelist. It contains and migrates no `host_session_id`,
+`HostSessionDescriptor`, onboarding code, Adapter instances, provider
+callables, current context, Registry, authority, current allowed-capability
+values, pending actions, or execution state. `tests/test_p2_release_audit.py`
+pins the package whitelist and byte-scans an exported package for P2 session
+markers after a real onboarding.
+
+## Limitations and non-goals
+
+P2 does **not** prove or provide: physical truth (declarations and frame
+assertions remain unattested Host claims), malicious-Host or malicious-package
+safety, cryptographic identity or session uniqueness, real UAV/hardware
+safety, hardware or physical resource rollback, online body swap or hot
+rebind, dynamic/deferred authority, semantic capability equivalence or
+automatic capability adaptation, LLM interpretation, tf2/frame transforms,
+cross-platform performance, or multi-process consistency. It adds no new
+research mechanism; P2.3–P2.7 are engineering completion, validation, and
+evidence only.
